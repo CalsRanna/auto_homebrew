@@ -1,0 +1,184 @@
+import 'dart:io';
+import 'package:tapster/models/tapster_config.dart';
+import 'package:tapster/services/asset_service.dart';
+
+class FormulaService {
+  static const String defaultFormulaTemplate = '''
+class {{CLASS_NAME}} < Formula
+  desc "{{DESCRIPTION}}"
+  homepage "{{HOMEPAGE}}"
+  license "{{LICENSE}}"
+  version "{{VERSION}}"
+
+  {{#if has_multiple_architectures}}
+  on_macos do
+    if Hardware::CPU.arm?
+      url "{{URL_ARM64}}"
+      sha256 "{{SHA256_ARM64}}"
+    elsif Hardware::CPU.intel?
+      url "{{URL_AMD64}}"
+      sha256 "{{SHA256_AMD64}}"
+    end
+  end
+  {{else}}
+  url "{{URL}}"
+  sha256 "{{SHA256}}"
+  {{/if}}
+
+  def install
+    bin.install "{{EXECUTABLE_NAME}}"
+    {{#if has_man_page}}man1.install "{{MAN_PAGE_NAME}}"{{/if}}
+    {{#if has_bash_completion}}bash_completion.install "{{BASH_COMPLETION_NAME}}"{{/if}}
+    {{#if has_zsh_completion}}zsh_completion.install "{{ZSH_COMPLETION_NAME}}"{{/if}}
+    {{#if has_fish_completion}}fish_completion.install "{{FISH_COMPLETION_NAME}}"{{/if}}
+    {{#if has_license}}doc.install "{{LICENSE_NAME}}"{{/if}}
+  end
+
+  test do
+    system "\#{bin}/{{EXECUTABLE_NAME}}", "--version"
+  end
+end
+''';
+
+  Future<String> generateFormula(TapsterConfig config, Map<String, String> assets) async {
+    final assetService = AssetService();
+    final Map<String, dynamic> context = {
+      'CLASS_NAME': _toClassName(config.name),
+      'DESCRIPTION': config.description,
+      'HOMEPAGE': config.homepage,
+      'LICENSE': config.license,
+      'VERSION': config.version,
+      'has_multiple_architectures': assets.length > 1,
+    };
+
+    // Handle single architecture
+    if (assets.length == 1) {
+      final assetPath = assets.values.first;
+      final assetInfo = await assetService.getAssetInfo(assetPath);
+      context['URL'] = _getDefaultUrl(config, config.version);
+      context['SHA256'] = assetInfo.checksum;
+      context['EXECUTABLE_NAME'] = _getExecutableName(assetPath);
+    }
+    // Handle multiple architectures
+    else {
+      for (final arch in assets.keys) {
+        final assetPath = assets[arch]!;
+        final assetInfo = await assetService.getAssetInfo(assetPath);
+
+        if (arch.contains('arm') || arch.contains('aarch64')) {
+          context['URL_ARM64'] = _getUrlForArch(config, config.version, arch);
+          context['SHA256_ARM64'] = assetInfo.checksum;
+        } else {
+          context['URL_AMD64'] = _getUrlForArch(config, config.version, arch);
+          context['SHA256_AMD64'] = assetInfo.checksum;
+        }
+      }
+
+      // Set executable name from first asset, but remove arch suffix
+      final firstAssetPath = assets.values.first;
+      final fileName = _getFileName(firstAssetPath);
+      final executableName = fileName
+          .replaceAll(RegExp(r'_amd64$'), '')
+          .replaceAll(RegExp(r'_arm64$'), '')
+          .replaceAll(RegExp(r'_x86_64$'), '');
+      context['EXECUTABLE_NAME'] = executableName;
+    }
+
+    // Check for additional resources based on assets
+    context['has_man_page'] = false;
+    context['has_bash_completion'] = false;
+    context['has_zsh_completion'] = false;
+    context['has_fish_completion'] = false;
+    context['has_license'] = false;
+
+    // Look for resource files in the assets
+    for (final asset in config.assets) {
+      if (asset.type == 'man') {
+        context['has_man_page'] = true;
+        context['MAN_PAGE_NAME'] = _getFileName(asset.path);
+      } else if (asset.type == 'bash_completion') {
+        context['has_bash_completion'] = true;
+        context['BASH_COMPLETION_NAME'] = _getFileName(asset.path);
+      } else if (asset.type == 'zsh_completion') {
+        context['has_zsh_completion'] = true;
+        context['ZSH_COMPLETION_NAME'] = _getFileName(asset.path);
+      } else if (asset.type == 'fish_completion') {
+        context['has_fish_completion'] = true;
+        context['FISH_COMPLETION_NAME'] = _getFileName(asset.path);
+      } else if (asset.type == 'license') {
+        context['has_license'] = true;
+        context['LICENSE_NAME'] = _getFileName(asset.path);
+      }
+    }
+
+    return _renderTemplate(defaultFormulaTemplate, context);
+  }
+
+  String _renderTemplate(String template, Map<String, dynamic> context) {
+    var result = template;
+
+    // Replace simple variables
+    context.forEach((key, value) {
+      final placeholder = '{{$key}}';
+      result = result.replaceAll(placeholder, value.toString());
+    });
+
+    // Handle conditional blocks
+    result = _processConditionBlocks(result, context);
+
+    return result;
+  }
+
+  String _processConditionBlocks(String template, Map<String, dynamic> context) {
+    // Handle if/else blocks
+    final ifElseRegex = RegExp(r'\{\{#if (\w+)\}\}(.*?)\{\{else\}\}(.*?)\{\{/if\}\}', dotAll: true);
+    template = template.replaceAllMapped(ifElseRegex, (match) {
+      final condition = match.group(1)!;
+      final ifContent = match.group(2)!;
+      final elseContent = match.group(3)!;
+      final hasCondition = context[condition] == true;
+
+      return hasCondition ? ifContent : elseContent;
+    });
+
+    // Handle simple if blocks
+    final ifRegex = RegExp(r'\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}', dotAll: true);
+    template = template.replaceAllMapped(ifRegex, (match) {
+      final condition = match.group(1)!;
+      final content = match.group(2)!;
+      final hasCondition = context[condition] == true;
+
+      return hasCondition ? content : '';
+    });
+
+    return template;
+  }
+
+  String _toClassName(String packageName) {
+    // Convert package name to Ruby class name format
+    final parts = packageName.split(RegExp(r'[-_\s]+'));
+    return parts.map((part) =>
+      part.isNotEmpty ? '${part[0].toUpperCase()}${part.substring(1)}' : ''
+    ).join('');
+  }
+
+  String _getExecutableName(String path) {
+    return _getFileName(path);
+  }
+
+  String _getFileName(String path) {
+    return path.split(Platform.pathSeparator).last;
+  }
+
+  String _getDefaultUrl(TapsterConfig config, String version) {
+    // Generate GitHub release URL
+    final repo = config.repository.replaceAll('.git', '');
+    return '$repo/releases/download/v$version/{{EXECUTABLE_NAME}}';
+  }
+
+  String _getUrlForArch(TapsterConfig config, String version, String arch) {
+    final repo = config.repository.replaceAll('.git', '');
+    final executableName = config.name;
+    return '$repo/releases/download/v$version/${executableName}_${arch}';
+  }
+}
