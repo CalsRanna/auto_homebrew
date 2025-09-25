@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:args/command_runner.dart';
 import 'package:cli_spin/cli_spin.dart';
 import 'package:tapster/services/config_service.dart';
@@ -198,7 +199,6 @@ class PublishCommand extends Command {
             final tapRepoName = tapName.startsWith('homebrew-')
                 ? tapName
                 : 'homebrew-$tapName';
-            final tapRepoUrl = 'git@github.com:$tapOwner/$tapRepoName.git';
 
             // Check if tap repository exists, create if it doesn't
             try {
@@ -229,72 +229,54 @@ class PublishCommand extends Command {
               print('⚠️  Could not verify tap repository, continuing anyway');
             }
 
-            // Clone tap repository
-            final tempDir = Directory.systemTemp.createTempSync('tapster-');
+            // Encode content to base64 for GitHub API
+            final encodedContent = base64Encode(utf8.encode(formulaContent));
+
+            // Check if file already exists to get its SHA
+            String? sha;
             try {
-              final tapRepoDir = Directory('${tempDir.path}/tap');
-
-              // Clone the tap repository
-              await Process.run('git', ['clone', tapRepoUrl, tapRepoDir.path]);
-
-              // Write formula file
-              final formulaFile = File('${tapRepoDir.path}/$formulaFileName');
-              await formulaFile.create(recursive: true);
-              await formulaFile.writeAsString(formulaContent);
-
-              // Set git user configuration for this repository
-              await Process.run('git', [
-                'config',
-                'user.name',
-                'tapster',
-              ], workingDirectory: tapRepoDir.path);
-              await Process.run('git', [
-                'config',
-                'user.email',
-                'tapster@localhost',
-              ], workingDirectory: tapRepoDir.path);
-
-              // Commit and push
-              final addResult = await Process.run('git', [
-                'add',
-                formulaFileName,
-              ], workingDirectory: tapRepoDir.path);
-              if (addResult.exitCode != 0) {
-                throw Exception(
-                  'Failed to add formula file: ${addResult.stdout}\n${addResult.stderr}',
-                );
+              final checkResult = await Process.run('gh', [
+                'api',
+                'repos/$tapOwner/$tapRepoName/contents/$formulaFileName',
+              ]);
+              if (checkResult.exitCode == 0) {
+                final fileData = jsonDecode(checkResult.stdout) as Map<String, dynamic>;
+                sha = fileData['sha'] as String?;
               }
-
-              final commitResult = await Process.run('git', [
-                'commit',
-                '-m',
-                "Add $config.name $config.version",
-              ], workingDirectory: tapRepoDir.path);
-              if (commitResult.exitCode != 0) {
-                throw Exception(
-                  'Failed to commit formula file: ${commitResult.stdout}\n${commitResult.stderr}',
-                );
-              }
-
-              final pushResult = await Process.run('git', [
-                'push',
-                'origin',
-                'main',
-              ], workingDirectory: tapRepoDir.path);
-              if (pushResult.exitCode != 0) {
-                throw Exception(
-                  'Failed to push to tap repository: ${pushResult.stdout}\n${pushResult.stderr}',
-                );
-              }
-
-              return {
-                'formula_file': formulaFileName,
-                'tap_repo': config.publish.tap,
-                'formula_content': formulaContent,
-              };
-            } finally {
-              await tempDir.delete(recursive: true);
+            } catch (e) {
+              // File doesn't exist, which is expected for new files
+              sha = null;
             }
+
+            // Push file directly using GitHub API
+            final apiArgs = [
+              'api',
+              '-X', 'PUT',
+              'repos/$tapOwner/$tapRepoName/contents/$formulaFileName',
+              '-f', 'message=Add ${config.name} ${config.version}',
+              '-f', 'content=$encodedContent',
+              '-f', 'branch=main',
+            ];
+
+            // Add SHA if updating existing file
+            if (sha != null) {
+              apiArgs.add('-f');
+              apiArgs.add('sha=$sha');
+            }
+
+            final apiResult = await Process.run('gh', apiArgs);
+
+            if (apiResult.exitCode != 0) {
+              throw Exception(
+                'Failed to push formula file: ${apiResult.stdout}\n${apiResult.stderr}',
+              );
+            }
+
+            return {
+              'formula_file': formulaFileName,
+              'tap_repo': config.publish.tap,
+              'formula_content': formulaContent,
+            };
           },
         ),
       ];
