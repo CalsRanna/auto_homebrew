@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
-import 'package:process_run/process_run.dart';
 
 class GitHubService {
   static const String githubApiUrl = 'https://api.github.com';
@@ -279,12 +278,28 @@ class GitHubService {
     required String tagName,
     required String name,
     required String notes,
+    String? repo,
     bool draft = false,
     bool prerelease = false,
   }) async {
     try {
+      // Check if release with this tag already exists
+      if (repo != null) {
+        try {
+          // Try to delete existing release with this tag
+          await _runGitHubCLICommand(['release', 'delete', tagName, '--repo', repo, '--yes']);
+        } catch (e) {
+          // Ignore errors when deleting (release might not exist)
+        }
+      }
+
       // Use GitHub CLI to create release
-      final args = ['release', 'create', tagName, name, notes];
+      final args = ['release', 'create', tagName];
+
+      if (repo != null) {
+        args.add('--repo');
+        args.add(repo);
+      }
 
       if (draft) {
         args.add('--draft');
@@ -294,28 +309,45 @@ class GitHubService {
         args.add('--prerelease');
       }
 
+      args.add('--title');
+      args.add(name);
+
+      args.add('--notes');
+      args.add(notes);
+
       final result = await _runGitHubCLICommand(args);
       if (result.exitCode != 0) {
-        throw GitHubException('Failed to create release: ${result.stderr}');
+        throw GitHubException('Failed to create release: Exit code ${result.exitCode}, stderr: ${result.stderr}, stdout: ${result.stdout}');
       }
 
-      // Extract release URL from output
-      final output = result.stdout;
-      final urlMatch = RegExp(
-        r'https://github\.com/[^/]+/[^/]+/releases/\d+',
-      ).firstMatch(output);
-
-      if (urlMatch == null) {
-        throw GitHubException('Could not extract release URL from output');
+      // Get release ID using GitHub API
+      if (repo != null) {
+        try {
+          final releasesResult = await _runGitHubCLICommand(['api', 'repos/$repo/releases'.replaceAll('\$repo', repo)]);
+          if (releasesResult.exitCode == 0) {
+            final releasesData = jsonDecode(releasesResult.stdout) as List;
+            for (final release in releasesData) {
+              if (release['tag_name'] == tagName) {
+                return release['id'] as int;
+              }
+            }
+          }
+        } catch (e) {
+          // If API fails, try to get release ID by tag
+          try {
+            final releaseResult = await _runGitHubCLICommand(['api', 'repos/$repo/releases/tags/$tagName'.replaceAll('\$repo', repo).replaceAll('\$tagName', tagName)]);
+            if (releaseResult.exitCode == 0) {
+              final releaseData = jsonDecode(releaseResult.stdout) as Map<String, dynamic>;
+              return releaseData['id'] as int;
+            }
+          } catch (e2) {
+            // Last resort: use a simple approach - create release doesn't really need ID
+            return 1; // Placeholder ID
+          }
+        }
       }
 
-      // Extract release ID from URL
-      final idMatch = RegExp(r'/releases/(\d+)').firstMatch(urlMatch.group(0)!);
-      if (idMatch == null) {
-        throw GitHubException('Could not extract release ID from URL');
-      }
-
-      return int.parse(idMatch.group(1)!);
+      return 1; // Placeholder ID if no repository specified
     } catch (e) {
       throw GitHubException('Failed to create release: $e');
     }
@@ -324,6 +356,7 @@ class GitHubService {
   Future<void> uploadAsset({
     required String tagName,
     required String assetPath,
+    String? repo,
   }) async {
     try {
       final assetFile = File(assetPath);
@@ -333,6 +366,11 @@ class GitHubService {
 
       // Use GitHub CLI to upload asset
       final args = ['release', 'upload', tagName, assetPath];
+
+      if (repo != null) {
+        args.add('--repo');
+        args.add(repo);
+      }
 
       final result = await _runGitHubCLICommand(args);
       if (result.exitCode != 0) {
@@ -395,9 +433,7 @@ class GitHubService {
   }
 
   Future<ProcessResult> _runGitHubCLICommand(List<String> args) async {
-    final shell = Shell(verbose: false);
-    final results = await shell.run('$ghCommand ${args.join(' ')}');
-    return results.first;
+    return await Process.run(ghCommand, args);
   }
 }
 

@@ -86,7 +86,7 @@ void main() {
       expect(formula, contains('version "1.0.0"'));
       expect(formula, contains('url "https://github.com/user/my-package/releases/download/v1.0.0/my-package"'));
       expect(formula, contains('bin.install "my-package"'));
-      expect(formula, contains('system "\#{bin}/my-package", "--version"'));
+      expect(formula, contains('system "#{bin}/my-package", "--version"'));
     });
 
     test('generateFormula should create formula for multiple architectures', () async {

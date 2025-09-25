@@ -66,9 +66,7 @@ class InitCommand extends Command {
   Future<TapsterConfig> _manualConfig() async {
     // Get GitHub username and email from local config
     final githubUsername = await _getGithubUsername();
-    final email = await _getEmail();
     final defaultOwner = githubUsername ?? 'user';
-    final defaultEmail = email ?? '$defaultOwner@example.com';
 
     final name = await _askString('Package name', 'my-package');
     final version = await _askString('Version', '1.0.0');
@@ -147,21 +145,7 @@ class InitCommand extends Command {
     );
   }
 
-  Future<String?> _getEmail() async {
-    try {
-      final result = await Process.run('git', ['config', '--global', 'user.email']);
-      if (result.exitCode == 0) {
-        final email = (result.stdout as String).trim();
-        if (email.isNotEmpty && email.contains('@')) {
-          return email;
-        }
-      }
-    } catch (e) {
-      // Git config not available
-    }
-    return null;
-  }
-
+  
   Future<String?> _getGithubUsername() async {
     try {
       // Try GitHub CLI first
