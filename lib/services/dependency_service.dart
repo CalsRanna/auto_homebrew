@@ -1,9 +1,49 @@
 import 'package:tapster/services/git_service.dart';
 import 'package:tapster/services/github_service.dart';
+import 'package:tapster/services/homebrew_service.dart';
+import 'package:tapster/services/network_service.dart';
 
 class DependencyService {
   final GitService _gitService = GitService();
   final GitHubService _gitHubService = GitHubService();
+  final HomebrewService _homebrewService = HomebrewService();
+  final NetworkService _networkService = NetworkService();
+
+  Future<DoctorCheckResult> checkDoctorDependencies() async {
+    final result = DoctorCheckResult();
+
+    // Check Git environment
+    result.git = await _gitService.checkDoctorEnvironment();
+
+    // Check GitHub CLI environment
+    result.github = await _gitHubService.checkDoctorEnvironment();
+
+    // Check Homebrew environment
+    result.homebrew = await _homebrewService.checkEnvironment();
+
+    // Check Network connectivity
+    result.network = await _networkService.checkConnectivity();
+
+    return result;
+  }
+
+  Future<Map<String, dynamic>> checkDoctorComponent(String component) async {
+    switch (component) {
+      case 'git':
+        return await _gitService.checkDoctorEnvironment();
+      case 'github':
+        return await _gitHubService.checkDoctorEnvironment();
+      case 'homebrew':
+        return await _homebrewService.checkEnvironment();
+      case 'network':
+        return await _networkService.checkConnectivity();
+      default:
+        return <String, dynamic>{
+          'valid': false,
+          'issues': ['Unknown component: $component'],
+        };
+    }
+  }
 
   Future<DependencyCheckResult> checkDependencies() async {
     final result = DependencyCheckResult();
@@ -83,6 +123,13 @@ class DependencyService {
 
     return buffer.toString();
   }
+}
+
+class DoctorCheckResult {
+  Map<String, dynamic>? git;
+  Map<String, dynamic>? github;
+  Map<String, dynamic>? homebrew;
+  Map<String, dynamic>? network;
 }
 
 class DependencyCheckResult {

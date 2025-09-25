@@ -4,6 +4,36 @@ import 'package:process_run/process_run.dart';
 class GitService {
   static const String gitCommand = 'git';
 
+  Future<Map<String, dynamic>> checkDoctorEnvironment() async {
+    final result = <String, dynamic>{'valid': false, 'issues': <String>[]};
+
+    try {
+      // Check Git installation
+      final gitResult = await _runGitCommand(['--version']);
+      if (gitResult.exitCode == 0) {
+        result['version'] = gitResult.stdout.trim();
+        result['valid'] = true;
+      } else {
+        result['issues'].add('Git not found or not working');
+        return result;
+      }
+
+      // Check Git configuration
+      final configs = ['user.name', 'user.email'];
+      for (final config in configs) {
+        final configResult = await _runGitCommand(['config', '--global', config]);
+        if (configResult.exitCode != 0 || configResult.stdout.trim().isEmpty) {
+          result['issues'].add('Git global config $config not set');
+        }
+      }
+
+    } catch (e) {
+      result['issues'].add('Failed to check Git installation: $e');
+    }
+
+    return result;
+  }
+
   Future<GitEnvironmentResult> checkEnvironment() async {
     final result = GitEnvironmentResult();
 

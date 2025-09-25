@@ -3,7 +3,6 @@ import 'package:args/command_runner.dart';
 import 'package:tapster/commands/publish_command.dart';
 import 'package:tapster/commands/init_command.dart';
 import 'package:tapster/commands/tap_command.dart';
-import 'package:tapster/commands/check_command.dart';
 import 'package:tapster/commands/formula_command.dart';
 import 'package:tapster/commands/wizard_command.dart';
 import 'package:tapster/commands/doctor_command.dart';
@@ -13,7 +12,6 @@ void main(List<String> arguments) async {
     ..addCommand(PublishCommand())
     ..addCommand(InitCommand())
     ..addCommand(TapCommand())
-    ..addCommand(CheckCommand())
     ..addCommand(FormulaCommand())
     ..addCommand(WizardCommand())
     ..addCommand(DoctorCommand());

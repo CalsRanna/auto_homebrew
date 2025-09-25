@@ -7,6 +7,98 @@ class GitHubService {
   static const String githubApiUrl = 'https://api.github.com';
   static const String ghCommand = 'gh';
 
+  Future<Map<String, dynamic>> checkDoctorEnvironment() async {
+    final result = <String, dynamic>{'valid': false, 'issues': <String>[]};
+
+    try {
+      // Check GitHub CLI installation
+      final ghResult = await _runGitHubCLICommand(['--version']);
+      if (ghResult.exitCode == 0) {
+        final version = ghResult.stdout.trim();
+        final cleanVersion = version.split('\n').first;
+        result['version'] = cleanVersion;
+        result['valid'] = true;
+      } else {
+        result['issues'].add('GitHub CLI (gh) not found or not working');
+        return result;
+      }
+
+      // Check GitHub authentication status
+      final authResult = await _runGitHubCLICommand(['auth', 'status']);
+      if (authResult.exitCode == 0) {
+        result['authenticated'] = true;
+
+        // Extract username from auth status
+        final authOutput = authResult.stdout;
+        final usernameMatch = RegExp(r'Logged in to .*? account ([\w-]+)').firstMatch(authOutput);
+        if (usernameMatch != null) {
+          result['username'] = usernameMatch.group(1);
+        } else {
+          result['issues'].add('Could not extract username from GitHub auth status');
+        }
+
+        // Check authentication method
+        if (authOutput.contains('SSH')) {
+          result['auth_method'] = 'SSH';
+        } else if (authOutput.contains('token')) {
+          result['auth_method'] = 'token';
+        } else {
+          result['auth_method'] = 'unknown';
+        }
+      } else {
+        result['authenticated'] = false;
+        result['issues'].add('GitHub CLI not authenticated');
+      }
+
+      // Check if user can access GitHub API and get username
+      try {
+        final userResult = await _runGitHubCLICommand(['api', 'user']);
+        if (userResult.exitCode == 0) {
+          result['api_access'] = true;
+          // Parse user info
+          final userOutput = userResult.stdout;
+          if (userOutput.contains('"login":')) {
+            final loginMatch = RegExp(r'"login":\s*"([^"]+)"').firstMatch(userOutput);
+            if (loginMatch != null) {
+              result['api_username'] = loginMatch.group(1);
+              // Use API username if auth status username is not available
+              if (result['username'] == null) {
+                result['username'] = loginMatch.group(1);
+                result['issues'].removeWhere((issue) => issue == 'Could not extract username from GitHub auth status');
+              }
+            }
+          }
+        } else {
+          result['api_access'] = false;
+          result['issues'].add('Cannot access GitHub API');
+        }
+      } catch (e) {
+        result['api_access'] = false;
+        result['issues'].add('GitHub API access failed: $e');
+      }
+
+      // Check repository permissions
+      try {
+        final repoResult = await _runGitHubCLICommand(['repo', 'view', '--json', 'name,owner,isAdmin']);
+        if (repoResult.exitCode == 0) {
+          result['repo_access'] = true;
+          final repoOutput = repoResult.stdout;
+          if (repoOutput.contains('"isAdmin": true')) {
+            result['repo_admin'] = true;
+          }
+        }
+      } catch (e) {
+        // Not in a git repo, this is okay
+        result['repo_access'] = false;
+      }
+
+    } catch (e) {
+      result['issues'].add('Failed to check GitHub CLI: $e');
+    }
+
+    return result;
+  }
+
   Future<GitHubEnvironmentResult> checkEnvironment() async {
     final result = GitHubEnvironmentResult();
 
