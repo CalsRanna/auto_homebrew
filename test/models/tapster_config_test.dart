@@ -96,7 +96,7 @@ void main() {
             target: 'test-package',
             type: 'binary',
             archs: {'amd64': 'x86_64', 'arm64': 'arm64'},
-            checksum: true,
+            checksum: 'sha256:abcdef123456789',
           ),
         ],
       );
@@ -315,7 +315,7 @@ void main() {
         target: 'test-package',
         type: 'binary',
         archs: {'amd64': 'x86_64', 'arm64': 'arm64'},
-        checksum: true,
+        checksum: 'sha256:abcdef123456789',
       );
 
       final json = config.toJson();

@@ -124,81 +124,91 @@ class ConfigService {
     buffer.writeln('repository: ${config.repository}');
     buffer.writeln('license: ${config.license}');
 
-    if (config.authors.isNotEmpty) {
-      buffer.writeln('authors:');
-      for (final author in config.authors) {
-        buffer.writeln('  - $author');
+    // Only include build section if there's actual content
+    if (config.build.main.isNotEmpty ||
+        config.build.sourceFiles.isNotEmpty ||
+        config.build.includeDirs.isNotEmpty ||
+        config.build.libDirs.isNotEmpty ||
+        config.build.frameworks.isNotEmpty ||
+        config.build.defines.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('build:');
+
+      if (config.build.main.isNotEmpty) {
+        buffer.writeln('  main: ${config.build.main}');
+      }
+
+      if (config.build.sourceFiles.isNotEmpty) {
+        buffer.writeln('  source_files:');
+        for (final file in config.build.sourceFiles) {
+          buffer.writeln('    - $file');
+        }
+      }
+
+      if (config.build.includeDirs.isNotEmpty) {
+        buffer.writeln('  include_dirs:');
+        for (final dir in config.build.includeDirs) {
+          buffer.writeln('    - $dir');
+        }
+      }
+
+      if (config.build.libDirs.isNotEmpty) {
+        buffer.writeln('  lib_dirs:');
+        for (final dir in config.build.libDirs) {
+          buffer.writeln('    - $dir');
+        }
+      }
+
+      if (config.build.frameworks.isNotEmpty) {
+        buffer.writeln('  frameworks:');
+        for (final framework in config.build.frameworks) {
+          buffer.writeln('    - $framework');
+        }
+      }
+
+      if (config.build.defines.isNotEmpty) {
+        buffer.writeln('  defines:');
+        config.build.defines.forEach((key, value) {
+          buffer.writeln('    $key: $value');
+        });
       }
     }
 
-    buffer.writeln();
-    buffer.writeln('build:');
-    buffer.writeln('  main: ${config.build.main}');
+    // Only include dependencies section if there's actual content
+    if (config.dependencies.brew.isNotEmpty ||
+        config.dependencies.system.isNotEmpty ||
+        config.dependencies.macos.isNotEmpty ||
+        config.dependencies.linux.isNotEmpty) {
+      buffer.writeln();
+      buffer.writeln('dependencies:');
 
-    if (config.build.sourceFiles.isNotEmpty) {
-      buffer.writeln('  source_files:');
-      for (final file in config.build.sourceFiles) {
-        buffer.writeln('    - $file');
+      if (config.dependencies.brew.isNotEmpty) {
+        buffer.writeln('  brew:');
+        for (final dep in config.dependencies.brew) {
+          buffer.writeln('    - $dep');
+        }
       }
-    }
 
-    if (config.build.includeDirs.isNotEmpty) {
-      buffer.writeln('  include_dirs:');
-      for (final dir in config.build.includeDirs) {
-        buffer.writeln('    - $dir');
+      if (config.dependencies.system.isNotEmpty) {
+        buffer.writeln('  system:');
+        config.dependencies.system.forEach((key, value) {
+          buffer.writeln('    $key: $value');
+        });
       }
-    }
 
-    if (config.build.libDirs.isNotEmpty) {
-      buffer.writeln('  lib_dirs:');
-      for (final dir in config.build.libDirs) {
-        buffer.writeln('    - $dir');
+      if (config.dependencies.macos.isNotEmpty) {
+        buffer.writeln('  macos:');
+        config.dependencies.macos.forEach((key, value) {
+          buffer.writeln('    $key: $value');
+        });
       }
-    }
 
-    if (config.build.frameworks.isNotEmpty) {
-      buffer.writeln('  frameworks:');
-      for (final framework in config.build.frameworks) {
-        buffer.writeln('    - $framework');
+      if (config.dependencies.linux.isNotEmpty) {
+        buffer.writeln('  linux:');
+        config.dependencies.linux.forEach((key, value) {
+          buffer.writeln('    $key: $value');
+        });
       }
-    }
-
-    if (config.build.defines.isNotEmpty) {
-      buffer.writeln('  defines:');
-      config.build.defines.forEach((key, value) {
-        buffer.writeln('    $key: $value');
-      });
-    }
-
-    buffer.writeln();
-    buffer.writeln('dependencies:');
-
-    if (config.dependencies.brew.isNotEmpty) {
-      buffer.writeln('  brew:');
-      for (final dep in config.dependencies.brew) {
-        buffer.writeln('    - $dep');
-      }
-    }
-
-    if (config.dependencies.system.isNotEmpty) {
-      buffer.writeln('  system:');
-      config.dependencies.system.forEach((key, value) {
-        buffer.writeln('    $key: $value');
-      });
-    }
-
-    if (config.dependencies.macos.isNotEmpty) {
-      buffer.writeln('  macos:');
-      config.dependencies.macos.forEach((key, value) {
-        buffer.writeln('    $key: $value');
-      });
-    }
-
-    if (config.dependencies.linux.isNotEmpty) {
-      buffer.writeln('  linux:');
-      config.dependencies.linux.forEach((key, value) {
-        buffer.writeln('    $key: $value');
-      });
     }
 
     buffer.writeln();

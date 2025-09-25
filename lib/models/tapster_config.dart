@@ -207,14 +207,14 @@ class AssetConfig {
   final String target;
   final String type;
   final Map<String, String> archs;
-  final bool checksum;
+  final String? checksum;
 
   AssetConfig({
     required this.path,
     required this.target,
     required this.type,
     required this.archs,
-    required this.checksum,
+    this.checksum,
   });
 
   factory AssetConfig.fromJson(Map<String, dynamic> json) {
@@ -223,7 +223,7 @@ class AssetConfig {
       target: json['target'] as String,
       type: json['type'] as String,
       archs: Map<String, String>.from(json['archs'] ?? {}),
-      checksum: json['checksum'] as bool? ?? true,
+      checksum: json['checksum'] as String?,
     );
   }
 

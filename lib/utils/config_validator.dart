@@ -34,12 +34,7 @@ class ConfigValidator {
       errors.add('Description is required');
     }
 
-    if (config.homepage.trim().isEmpty) {
-      errors.add('Homepage is required');
-    } else if (!_isValidUrl(config.homepage)) {
-      errors.add('Invalid homepage URL: ${config.homepage}');
-    }
-
+    
     if (config.repository.trim().isEmpty) {
       errors.add('Repository URL is required');
     } else if (!_isValidUrl(config.repository)) {
@@ -61,10 +56,7 @@ class ConfigValidator {
       }
     }
 
-    // Validate build configuration
-    if (config.build.main.trim().isEmpty) {
-      errors.add('Build main file is required');
-    }
+    // Build configuration is optional for pre-built binaries
 
     // Validate assets
     if (config.assets.isEmpty) {

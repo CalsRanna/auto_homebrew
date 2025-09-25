@@ -207,7 +207,7 @@ class PublishCommand extends Command {
           assetSpinner.success('✅ All ${assetInfos.length} assets validated');
           for (final asset in assetInfos) {
             if (asset.exists) {
-              print('  - ${asset.path} (${asset.size} bytes, ${asset.checksum.substring(0, 16)}...)');
+              print('  - ${asset.path} (${asset.size} bytes, ${asset.checksum ?? "no checksum"}...)');
             }
           }
         } catch (e) {
@@ -366,7 +366,7 @@ class PublishCommand extends Command {
                   );
                   assets[asset.path] = {
                     'size': asset.size,
-                    'checksum': asset.checksum,
+                    'checksum': asset.checksum ?? 'no checksum',
                   };
                 }
               }
@@ -533,7 +533,7 @@ class PublishCommand extends Command {
           target: binaryPath.split(Platform.pathSeparator).last,
           type: 'binary',
           archs: {'amd64': 'x86_64', 'arm64': 'arm64'},
-          checksum: true,
+          checksum: null,
         ),
       ],
     );
