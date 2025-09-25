@@ -22,37 +22,36 @@ class PublishCommand extends Command {
     if (argResults == null) return;
 
     // Show start message
-    print('🚀 Starting Homebrew package publishing...');
-    print('');
+    print('Publish summary (to see all details, run tapster publish -v):');
 
     try {
       // Load configuration
-      final configSpinner = CliSpin(text: 'Loading configuration...')..start();
+      final spinner = CliSpin()..start();
 
       final configService = ConfigService();
       final configPath = '.tapster.yaml';
       final configFile = File(configPath);
 
       if (!await configFile.exists()) {
-        configSpinner.fail('❌ Configuration file not found');
-        print('');
-        print('❌ No configuration file found at: $configPath');
-        print('');
-        print('Create a configuration file first:');
-        print('   tapster init');
+        spinner.stop();
+        print('\x1B[31m[✗]\x1B[0m Configuration file not found');
+        print('    No configuration file found at: $configPath');
+        print('    Create a configuration file first: tapster init');
         print('');
         exit(1);
       }
 
       // Load existing configuration
       final config = await configService.loadConfig(null);
-      configSpinner.success(
-        '✅ Loaded configuration for: ${config.name} v${config.version}',
+      spinner.stop();
+      print(
+        '\x1B[32m[✓]\x1B[0m Configuration loaded ($configPath, ${config.version})',
       );
 
       await _executePublishWorkflow();
     } catch (e) {
-      print('❌ Error: $e');
+      print('\x1B[31m[✗]\x1B[0m Publishing failed');
+      print('    Error: $e');
       exit(1);
     }
   }
@@ -240,7 +239,8 @@ class PublishCommand extends Command {
                 'repos/$tapOwner/$tapRepoName/contents/$formulaFileName',
               ]);
               if (checkResult.exitCode == 0) {
-                final fileData = jsonDecode(checkResult.stdout) as Map<String, dynamic>;
+                final fileData =
+                    jsonDecode(checkResult.stdout) as Map<String, dynamic>;
                 sha = fileData['sha'] as String?;
               }
             } catch (e) {
@@ -251,11 +251,15 @@ class PublishCommand extends Command {
             // Push file directly using GitHub API
             final apiArgs = [
               'api',
-              '-X', 'PUT',
+              '-X',
+              'PUT',
               'repos/$tapOwner/$tapRepoName/contents/$formulaFileName',
-              '-f', 'message=Add ${config.name} ${config.version}',
-              '-f', 'content=$encodedContent',
-              '-f', 'branch=main',
+              '-f',
+              'message=Add ${config.name} ${config.version}',
+              '-f',
+              'content=$encodedContent',
+              '-f',
+              'branch=main',
             ];
 
             // Add SHA if updating existing file
@@ -284,23 +288,23 @@ class PublishCommand extends Command {
       final results = <String, dynamic>{};
 
       for (final step in steps) {
-        final spinner = CliSpin(text: step.description)..start();
+        final spinner = CliSpin()..start();
         step.spinner = spinner;
 
         try {
           final result = await step.action();
           results[step.name] = result;
-          step.spinner?.success('✅ ${step.name} completed');
+          spinner.stop();
+          _displayStepSuccess(step.name, result);
         } catch (e) {
-          step.spinner?.fail('❌ ${step.name} failed: $e');
+          spinner.stop();
+          _displayStepFailure(step.name, e);
           rethrow;
         }
       }
 
       print('');
-      print('🎉 Publishing completed successfully!');
-      print('Package: ${config.name}');
-      print('Version: ${config.version}');
+      print('\x1B[32m[✓]\x1B[0m Publishing completed successfully!');
     } catch (e) {
       rethrow;
     }
@@ -318,4 +322,42 @@ class PublishStep {
     required this.description,
     required this.action,
   });
+}
+
+void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
+  switch (stepName) {
+    case 'Create GitHub Release':
+      print('\x1B[32m[✓]\x1B[0m GitHub release created (${result['tag']})');
+      print('    Tag: ${result['tag']}');
+      print('    Release ID: ${result['release_id']}');
+      final assets = result['assets'] as Map<String, dynamic>;
+      if (assets.isNotEmpty) {
+        print('    Assets uploaded: ${assets.length}');
+        for (final assetName in assets.keys) {
+          final assetInfo = assets[assetName] as Map<String, dynamic>;
+          print('    • $assetName (${assetInfo['size']} bytes)');
+        }
+      }
+      break;
+
+    case 'Generate Formula':
+      print(
+        '\x1B[32m[✓]\x1B[0m Homebrew formula generated (${result['formula_file']})',
+      );
+      final formula = result['formula'] as String;
+      final lines = formula.split('\n');
+      print('    Formula length: ${lines.length} lines');
+      break;
+
+    case 'Push Formula to Tap':
+      print('\x1B[32m[✓]\x1B[0m Homebrew tap pushed (${result['tap_repo']})');
+      print('    Tap repository: ${result['tap_repo']}');
+      print('    Formula file: ${result['formula_file']}');
+      break;
+  }
+}
+
+void _displayStepFailure(String stepName, dynamic error) {
+  print('\x1B[31m[✗]\x1B[0m $stepName failed');
+  print('    Error: $error');
 }
