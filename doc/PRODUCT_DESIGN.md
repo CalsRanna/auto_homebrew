@@ -109,16 +109,11 @@ Homebrew 的软件包仓库被称为 "Tap"。Tapster 的角色就像一位专业
 *   `--json`: 以 JSON 格式输出结果。
 *   `--config <path>`: 指定 `.tapster.yaml` 配置文件路径。
 
-#### `tapster tap create`
-创建新的 Homebrew Tap 仓库。
-
-**用法**: `tapster tap create --name <tap-name> [--private]`
-
 #### `tapster init`
 在当前目录初始化 `.tapster.yaml` 配置文件。
 
-#### `tapster wizard`
-启动交互式向导来引导一次发布。
+#### `tapster doctor`
+检查系统环境和依赖，确保发布环境正常。
 
 ---
 
@@ -188,7 +183,7 @@ executables:
 **Version 1.0 (MVP - 核心功能)**
 *   **目标**: 提供一个健壮、CI/CD 友好的核心发布工具。
 *   **包含功能**:
-    *   `publish`, `init`, `tap create` 命令。
+    *   `publish`, `init`, `doctor` 命令。
     *   **关键特性**: 多架构支持 (`--asset-*`)。
     *   **关键特性**: 非交互式认证 (via `GITHUB_TOKEN`)。
     *   **关键特性**: 演练模式 (`--dry-run`)。

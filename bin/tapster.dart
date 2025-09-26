@@ -2,17 +2,13 @@ import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:tapster/commands/publish_command.dart';
 import 'package:tapster/commands/init_command.dart';
-import 'package:tapster/commands/tap_command.dart';
-import 'package:tapster/commands/formula_command.dart';
 import 'package:tapster/commands/doctor_command.dart';
 
 void main(List<String> arguments) async {
   final runner = CommandRunner('tapster', 'Homebrew Package Publishing Automation Tool')
     ..addCommand(PublishCommand())
     ..addCommand(InitCommand())
-    ..addCommand(TapCommand())
-    ..addCommand(FormulaCommand())
-      ..addCommand(DoctorCommand());
+    ..addCommand(DoctorCommand());
 
   try {
     await runner.run(arguments);
