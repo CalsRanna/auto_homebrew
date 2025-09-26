@@ -5,7 +5,7 @@
 ### 1.1 整体架构
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Tapster CLI   │────│  GitHub API     │────│  Homebrew Tap   │
+│   Tapster CLI   │────│  GitHub CLI     │────│  Homebrew Tap   │
 │   (Dart App)    │    │   (gh CLI)      │    │   Repository    │
 └─────────────────┘    └─────────────────┘    └─────────────────┘
          │                        │                        │
@@ -17,17 +17,29 @@
 └─────────────────┘    └─────────────────┘    └─────────────────┘
 ```
 
-### 1.2 核心组件模块
+### 1.2 实际项目结构
 ```
 tapster/
 ├── lib/
 │   ├── commands/           # CLI 命令实现
-│   ├── core/              # 核心业务逻辑
-│   ├── models/            # 数据模型
+│   │   ├── init_command.dart      # 初始化命令
+│   │   ├── publish_command.dart   # 发布命令
+│   │   └── doctor_command.dart    # 环境检查命令
 │   ├── services/          # 外部服务集成
-│   ├── utils/             # 工具函数
-│   └── templates/         # Formula 模板
+│   │   ├── config_service.dart    # 配置文件管理
+│   │   ├── github_service.dart    # GitHub CLI 集成
+│   │   ├── formula_service.dart   # Formula 生成
+│   │   ├── asset_service.dart     # 资源文件处理
+│   │   ├── dependency_service.dart # 依赖管理
+│   │   ├── git_service.dart       # Git 操作
+│   │   ├── homebrew_service.dart  # Homebrew 集成
+│   │   └── network_service.dart  # 网络连接检查
+│   ├── models/            # 数据模型
+│   │   └── tapster_config.dart    # 主配置模型
+│   └── utils/             # 工具类
+│       └── config_validator.dart  # 配置验证
 ├── bin/                   # 可执行文件
+│   └── tapster.dart       # 主入口
 └── test/                  # 测试文件
 ```
 
@@ -37,26 +49,22 @@ tapster/
 - **理由**：高性能、跨平台、优秀的 CLI 支持
 - **版本**：Dart 3.0+
 
-### 2.2 关键依赖包
+### 2.2 实际依赖包
 ```yaml
 dependencies:
   args: ^2.5.0          # 命令行参数解析 (CommandRunner)
   yaml: ^3.1.0          # YAML 配置文件解析
-  path: ^1.9.0          # 路径操作
-  crypto: ^3.0.0        # 哈希计算
+  crypto: ^3.0.0        # 哈希计算 (SHA256)
   http: ^1.2.0          # HTTP 请求
   cli_spin: ^1.0.0      # CLI 加载动画和进度显示
   process_run: ^1.2.0   # 增强的进程管理
-  collection: ^1.18.0   # 集合工具
-  meta: ^1.15.0         # 元数据注解
 
 dev_dependencies:
   test: ^1.24.0         # 单元测试
-  mocktail: ^1.0.0      # Mock 对象
   lints: ^3.0.0         # 代码规范
 ```
 
-### 2.3 依赖包详细说明
+### 2.3 实际依赖包详细说明
 
 #### CLI 和用户界面
 - **args**: 提供 CommandRunner 用于构建专业的命令行应用，支持子命令、自动帮助生成和错误处理
@@ -74,112 +82,97 @@ dev_dependencies:
   - 进程超时管理
 
 #### 工具和实用
-- **path**: 跨平台路径操作和文件系统路径处理
-- **crypto**: 提供加密和哈希功能，用于文件校验和计算
-- **http**: HTTP 客户端，用于与 GitHub API 交互
-- **collection**: 提供额外的集合操作工具和算法
-- **meta**: 元数据注解支持
+- **crypto**: 提供 SHA256 哈希计算，用于文件校验和
+- **http**: HTTP 客户端，用于网络连接检查
 
 #### 开发工具
 - **test**: Dart 官方测试框架
-- **mocktail**: Mock 对象库，用于单元测试
 - **lints**: 代码规范检查工具
 
 ### 2.4 外部系统依赖
 - **git**: 版本控制操作
-- **gh CLI**: GitHub API 交互
-- **shasum**: 文件哈希计算（备用）
+- **gh CLI**: GitHub API 交互和认证
 
 ## 3. 数据模型设计
 
-### 3.1 配置模型 (Configuration)
+### 3.1 实际配置模型 (TapsterConfig)
 ```dart
 class TapsterConfig {
-  String repo;                    // 源仓库 owner/name
-  String tapRepo;                 // Tap 仓库 owner/name
-  String description;             // 项目描述
-  String license;                 // 许可证
-  String homepage;                // 项目主页
-  Map<String, ExecutableConfig> executables; // 可执行文件配置
-}
-
-class ExecutableConfig {
-  String path;                    // 二进制文件路径
-  String? manPage;                // 手册页路径
-  Map<String, String>? completions; // 补全脚本路径
-  String? licenseFile;            // 许可证文件路径
+  final String name;                    // 包名
+  final String version;                 // 版本号
+  final String description;             // 项目描述
+  final String homepage;                // 项目主页
+  final String repository;             // Git 仓库地址
+  final String license;                 // 许可证
+  final List<String> dependencies;     // Homebrew 依赖
+  final String tap;                     // Tap 仓库
+  final String asset;                   // 二进制文件路径
+  final String? checksum;               // SHA256 校验和
 }
 ```
 
-### 3.2 发布模型 (PublishRequest)
-```dart
-class PublishRequest {
-  String version;                 // 版本号 (SemVer)
-  Map<String, String> assets;     // 架构 -> 文件路径
-  Map<String, String>? resources;  // 资源类型 -> 文件路径
-  String repo;                    // 源仓库
-  String tapRepo;                 // Tap 仓库
-  bool force;                     // 强制覆盖
-  bool generateNotes;             // 生成发行说明
-  bool dryRun;                    // 演练模式
-}
-```
+### 3.2 实际服务架构
 
-### 3.3 发布结果模型 (PublishResult)
-```dart
-class PublishResult {
-  bool success;                   // 是否成功
-  String? releaseUrl;            // Release URL
-  String? formulaUrl;            // Formula URL
-  List<String> performedActions; // 执行的操作
-  String? error;                 // 错误信息
-  Map<String, String> checksums;  // 文件校验和
-}
-```
+#### 核心服务层
+- **ConfigService**: 配置文件读取、验证和保存
+- **GitHubService**: GitHub CLI 操作和 Release 管理
+- **FormulaService**: Homebrew Formula 生成和模板渲染
+- **AssetService**: 文件校验和计算和资源处理
+- **DependencyService**: 统一依赖检查和环境验证
+- **GitService**: Git 操作和环境检查
+- **HomebrewService**: Homebrew 环境检查
+- **NetworkService**: 网络连接检查
 
-## 4. 核心服务层设计
+#### 辅助数据模型
+- **AssetInfo**: 文件信息（路径、大小、校验和）
+- **GitHubEnvironmentResult**: GitHub 环境检查结果
+- **DoctorCheckResult**: 环境检查结果
 
-### 4.1 GitService
+## 4. 实际核心服务层设计
+
+### 4.1 ConfigService
 ```dart
-class GitService {
-  Future<bool> isGitRepo();
-  Future<String> getRemoteUrl([String remote = 'origin']);
-  Future<void> createTag(String version);
-  Future<void> pushTag(String version);
-  Future<void> cloneRepo(String url, String path);
-  Future<void> commitAndPush(String message, String path);
+class ConfigService {
+  Future<TapsterConfig> loadConfig(String? configPath);
+  Future<void> saveConfig(TapsterConfig config, String? configPath);
+  Future<bool> configExists(String? configPath);
 }
 ```
 
 ### 4.2 GitHubService
 ```dart
 class GitHubService {
+  Future<Map<String, dynamic>> checkDoctorEnvironment();
+  Future<int> createReleaseCLI({...});
+  Future<void> uploadAsset({...});
   Future<bool> isAuthenticated();
-  Future<String> createRelease(String repo, String version,
-    {bool generateNotes = false});
-  Future<void> uploadAsset(String repo, String releaseId,
-    String filePath, String assetName);
-  Future<String> getReleaseUrl(String repo, String version);
-  Future<void> createRepository(String name, {bool isPrivate = false});
 }
 ```
 
 ### 4.3 FormulaService
 ```dart
 class FormulaService {
-  Future<String> generateFormula(PublishRequest request);
-  Future<void> updateFormula(String tapRepo, String formulaName,
-    String content);
-  Future<String> getFormulaContent(String tapRepo, String formulaName);
+  Future<String> generateFormula(TapsterConfig config);
+  String _renderTemplate(String template, Map<String, dynamic> context);
 }
 ```
 
 ### 4.4 AssetService
 ```dart
 class AssetService {
-  Future<Map<String, String>> calculateChecksums(Map<String, String> assets);
-  Future<bool> validateAssets(Map<String, String> assets);
-  Future<Map<String, int>> getAssetSizes(Map<String, String> assets);
+  Future<AssetInfo> getAssetInfo(String path);
+  Future<String> _calculateSHA256(File file);
+  Future<bool> createChecksumFile(String assetPath, String checksumPath);
+  Future<bool> validateChecksum(String assetPath, String checksumPath);
+}
+```
+
+### 4.5 DependencyService
+```dart
+class DependencyService {
+  Future<DoctorCheckResult> checkDoctorDependencies();
+  Future<Map<String, dynamic>> checkDoctorComponent(String component);
+  Future<DependencyCheckResult> checkDependencies();
 }
 ```
 
@@ -370,40 +363,24 @@ class ConfigValidator {
 }
 ```
 
-## 8. Formula 模板引擎
+## 8. 实际 Formula 模板引擎
 
-### 8.1 模板定义
+### 8.1 实际模板定义
 ```dart
-class FormulaTemplate {
-  static const String template = '''
+class FormulaService {
+  static const String defaultFormulaTemplate = '''
+# Generated by tapster on {{TIMESTAMP}}
 class {{CLASS_NAME}} < Formula
   desc "{{DESCRIPTION}}"
   homepage "{{HOMEPAGE}}"
-  license "{{LICENSE}}"
-  version "{{VERSION}}"
-
-  {{#if has_multiple_architectures}}
-  on_macos do
-    if Hardware::CPU.arm?
-      url "{{URL_ARM64}}"
-      sha256 "{{SHA256_ARM64}}"
-    elsif Hardware::CPU.intel?
-      url "{{URL_AMD64}}"
-      sha256 "{{SHA256_AMD64}}"
-    end
-  end
-  {{else}}
   url "{{URL}}"
   sha256 "{{SHA256}}"
-  {{/if}}
+  license "{{LICENSE}}"
+
+  {{#if depends_on_brew}}{{#each depends_on_brew}}depends_on "{{this}}"{{/each}}{{/if}}
 
   def install
     bin.install "{{EXECUTABLE_NAME}}"
-    {{#if has_man_page}}man1.install "{{MAN_PAGE_NAME}}"{{/if}}
-    {{#if has_bash_completion}}bash_completion.install "{{BASH_COMPLETION_NAME}}"{{/if}}
-    {{#if has_zsh_completion}}zsh_completion.install "{{ZSH_COMPLETION_NAME}}"{{/if}}
-    {{#if has_fish_completion}}fish_completion.install "{{FISH_COMPLETION_NAME}}"{{/if}}
-    {{#if has_license}}doc.install "{{LICENSE_NAME}}"{{/if}}
   end
 
   test do
@@ -414,12 +391,13 @@ end
 }
 ```
 
-### 8.2 模板渲染器
+### 8.2 实际模板渲染器
 ```dart
-class TemplateRenderer {
-  static String render(String template, Map<String, dynamic> context) {
+class FormulaService {
+  String _renderTemplate(String template, Map<String, dynamic> context) {
     var result = template;
 
+    // 替换简单变量
     context.forEach((key, value) {
       final placeholder = '{{$key}}';
       result = result.replaceAll(placeholder, value.toString());
@@ -431,17 +409,45 @@ class TemplateRenderer {
     return result;
   }
 
-  static String _processConditionBlocks(String template, Map<String, dynamic> context) {
-    // 处理 {{#if condition}}...{{/if}} 块
-    final regex = RegExp(r'\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}', dotAll: true);
+  String _processConditionBlocks(String template, Map<String, dynamic> context) {
+    // 处理 each 循环
+    final eachRegex = RegExp(r'\{\{#each (\w+)\}\}(.*?)\{\{/each\}\}', dotAll: true);
+    template = template.replaceAllMapped(eachRegex, (match) {
+      final arrayName = match.group(1)!;
+      final content = match.group(2)!;
+      final array = context[arrayName];
 
-    return template.replaceAllMapped(regex, (match) {
+      if (array is List) {
+        return array
+            .map((item) => content.replaceAll('{{this}}', item.toString()))
+            .join('');
+      }
+      return '';
+    });
+
+    // 处理 if/else 和简单 if 块
+    final ifElseRegex = RegExp(r'\{\{#if (\w+)\}\}(.*?)\{\{else\}\}(.*?)\{\{/if\}\}', dotAll: true);
+    template = template.replaceAllMapped(ifElseRegex, (match) {
+      final condition = match.group(1)!;
+      final ifContent = match.group(2)!;
+      final elseContent = match.group(3)!;
+      final value = context[condition];
+      final hasCondition = value == true || (value is List && value.isNotEmpty) || value?.toString().isNotEmpty == true;
+
+      return hasCondition ? ifContent : elseContent;
+    });
+
+    final ifRegex = RegExp(r'\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}', dotAll: true);
+    template = template.replaceAllMapped(ifRegex, (match) {
       final condition = match.group(1)!;
       final content = match.group(2)!;
-      final hasCondition = context[condition] == true;
+      final value = context[condition];
+      final hasCondition = value == true || (value is List && value.isNotEmpty) || value?.toString().isNotEmpty == true;
 
       return hasCondition ? content : '';
     });
+
+    return template;
   }
 }
 ```

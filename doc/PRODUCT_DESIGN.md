@@ -1,8 +1,8 @@
 ### **产品设计文档：Tapster**
 
-**版本**: 1.0
-**日期**: 2023年10月27日
-**作者**: Athena
+**版本**: 1.1
+**日期**: 2025年9月26日
+**作者**: Tapster 开发团队
 
 ---
 
@@ -50,29 +50,52 @@ Homebrew 的软件包仓库被称为 "Tap"。Tapster 的角色就像一位专业
 
 ### **3. 功能需求**
 
-#### **3.1. 核心发布流程 (`publish`)**
-*   支持发布新版本、升级现有版本或通过 `--force` 重新发布指定版本（实现降级）。
-*   自动创建或更新 Git 标签和 GitHub Release。
-*   自动计算一个或多个 Assets 的 SHA256 哈希值。
-*   自动生成或更新 Tap 仓库中的 Formula 文件。
+#### **3.1. 已实现的核心功能 (v1.0)**
 
-#### **3.2. 高级资产管理**
-*   **多架构支持**: 支持同时发布多个针对不同 CPU 架构（`amd64`, `arm64`）的 Assets。生成的 Formula 会根据用户系统架构自动选择正确的二进制文件。
-*   **辅助资源打包**: 支持将手册页 (`manpages`)、Shell 自动补全脚本（`bash`, `zsh`, `fish`）和许可证文件随主程序一同发布和安装。
+**核心发布流程 (`publish`)**
+*   ✅ 支持发布新版本、升级现有版本或通过 `--force` 重新发布指定版本
+*   ✅ 自动创建或更新 Git 标签和 GitHub Release
+*   ✅ 自动计算 Assets 的 SHA256 哈希值
+*   ✅ 自动生成 Tap 仓库中的 Formula 文件
+*   ✅ 自动创建 Tap 仓库（如果不存在）
 
-#### **3.3. Tap 仓库管理 (`tap`)**
-*   **自动创建**: `tapster tap create` 命令可一键在用户 GitHub 账户下创建符合 Homebrew 命名规范的 Tap 仓库。
-*   **关联配置**: 支持用户指定并使用任何已存在的 Tap 仓库。
+**配置管理 (`init`)**
+*   ✅ 交互式配置文件生成器
+*   ✅ 自动检测 Git 用户信息
+*   ✅ 支持配置文件验证和覆盖
 
-#### **3.4. CI/CD 与自动化集成**
-*   **非交互式认证**: 自动识别 `GITHUB_TOKEN` 环境变量，实现在 CI 环境中的无缝认证。
-*   **机器可读输出 (`--json`)**: 为关键命令提供 `--json` 标志，将执行结果以 JSON 格式输出到 stdout，便于流水线脚本解析。
-*   **自动生成发行说明**: 在创建 Release 时，可利用 GitHub API 根据 commit 历史自动生成变更日志。
+**环境检查 (`doctor`)**
+*   ✅ Git 环境检查和配置验证
+*   ✅ GitHub CLI 安装和认证状态检查
+*   ✅ Homebrew 安装状态检查
+*   ✅ 网络连接性和 GitHub API 访问检查
+*   ✅ 详细模式输出完整的诊断信息
 
-#### **3.5. 用户体验与安全性**
-*   **演练模式 (`--dry-run`)**: 在不执行任何实际写入或网络操作的情况下，完整预览发布流程的每一步，提供极致的安全性。
-*   **交互式向导 (`wizard`)**: 为新用户提供问答式的引导流程，逐步完成发布配置，极大降低上手难度。
-*   **事务性与清理**: 发布流程被设计为事务性操作。如果中间步骤失败，会尝试回滚已执行的操作，并自动清理克隆的仓库等临时文件。
+**基础架构支持**
+*   ✅ 基于 Dart CLI 的完整命令行框架
+*   ✅ YAML 配置文件管理
+*   ✅ GitHub CLI 集成（而非直接 API 调用）
+*   ✅ SHA256 校验和计算
+*   ✅ 用户友好的错误处理和进度显示
+
+#### **3.2. 未来规划功能 (v1.1+)**
+
+**多架构支持** (计划中)
+*   🔄 支持同时发布多个针对不同 CPU 架构（`amd64`, `arm64`）的 Assets
+*   🔄 生成的 Formula 根据用户系统架构自动选择正确的二进制文件
+
+**辅助资源打包** (计划中)
+*   🔄 支持手册页 (`manpages`) 打包和安装
+*   🔄 支持 Shell 自动补全脚本（`bash`, `zsh`, `fish`）
+*   🔄 支持许可证文件打包
+
+**CI/CD 集成增强** (计划中)
+*   🔄 机器可读输出 (`--json`) 格式
+*   🔄 更好的非交互式认证支持
+
+**高级用户体验** (计划中)
+*   🔄 演练模式 (`--dry-run`)
+*   🔄 事务性发布和失败回滚
 
 ---
 
@@ -81,74 +104,84 @@ Homebrew 的软件包仓库被称为 "Tap"。Tapster 的角色就像一位专业
 #### `tapster publish`
 发布或更新一个软件包。
 
-**用法**: `tapster publish --version <semver> --file <path> [options]`
+**当前实现用法**: `tapster publish [options]`
 
-**核心参数**:
-*   `--version <semver>`: 发布的版本号 (必须)。
-*   `--file <path>`: 指定默认（或单架构）的可执行文件路径。
+**当前支持的选项**:
+*   `-f, --force`: 强制覆盖已存在的版本发布
+*   `--config <path>`: 指定配置文件路径（计划中）
 
-**多架构参数**:
-*   `--asset-amd64 <path>`: x86_64 架构的可执行文件路径。
-*   `--asset-arm64 <path>`: arm64 架构的可执行文件路径。
-
-**辅助资源参数**:
-*   `--man-page <path>`: 手册页文件 (`.1` 后缀)。
-*   `--completion-bash <path>`: Bash 补全脚本。
-*   `--completion-zsh <path>`: Zsh 补全脚本。
-*   `--completion-fish <path>`: Fish 补全脚本。
-*   `--license-file <path>`: 许可证文件，将被一同安装。
-
-**流程控制参数**:
-*   `--repo <owner/name>`: 源项目仓库，默认为 Git remote `origin`。
-*   `--tap-repo <owner/name>`: Tap 仓库，默认为配置文件或推断值。
-*   `--force`: 强制执行，覆盖已存在的 Release、Tag 和 Formula。
-*   `--generate-notes`: 创建 Release 时自动生成发行说明。
-
-**全局标志**:
-*   `--dry-run`: 演练模式，只显示将要执行的操作。
-*   `--json`: 以 JSON 格式输出结果。
-*   `--config <path>`: 指定 `.tapster.yaml` 配置文件路径。
+**实际工作流程**:
+1. 从 `.tapster.yaml` 配置文件读取发布信息
+2. 验证配置文件和依赖环境
+3. 创建 GitHub Release 和标签
+4. 上传二进制文件到 Release
+5. 生成 Homebrew Formula
+6. 推送 Formula 到 Tap 仓库（自动创建如果不存在）
 
 #### `tapster init`
 在当前目录初始化 `.tapster.yaml` 配置文件。
 
+**当前实现用法**: `tapster init [options]`
+
+**当前支持的选项**:
+*   `--force`: 强制覆盖已存在的配置文件
+
+**实际功能**:
+*   交互式配置生成器
+*   自动检测 GitHub 用户信息
+*   自动计算二进制文件校验和
+
 #### `tapster doctor`
 检查系统环境和依赖，确保发布环境正常。
 
+**当前实现用法**: `tapster doctor [options]`
+
+**当前支持的选项**:
+*   `-v, --verbose`: 显示详细的诊断信息
+
+**实际检查项目**:
+*   Git 环境和配置
+*   GitHub CLI 安装和认证
+*   Homebrew 安装状态
+*   网络连接和 GitHub API 访问
+
 ---
 
-### **5. 技术设计**
+### **5. 实际技术实现**
 
-**5.1. 依赖项**
+**5.1. 实际依赖项**
 *   **外部**: `git`, `gh` (GitHub CLI)。启动时必须进行检查与认证。
-*   **内部 (Dart)**: `args`, `yaml`, `process`, `crypto`, `path` 等。
+*   **内部 (Dart)**: `args`, `yaml`, `crypto`, `cli_spin`, `process_run`, `http`, `test` 等。
 
-**5.2. 增强型 Formula 模板**
-模板将包含支持多架构和辅助资源的逻辑。
+**5.2. 实际配置文件结构 (.tapster.yaml)**
+```yaml
+name: package-name
+version: 1.0.0
+description: Package description
+homepage: https://github.com/user/repo
+repository: https://github.com/user/repo.git
+license: MIT
+dependencies:
+  - curl
+  - openssl
+tap: user/homebrew-tap
+asset: build/binary-file
+checksum: sha256-checksum (可选)
+```
+
+**5.3. 实际 Formula 模板**
 ```ruby
 class {{CLASS_NAME}} < Formula
   desc "{{DESCRIPTION}}"
   homepage "{{HOMEPAGE}}"
+  url "{{URL}}"
+  sha256 "{{SHA256}}"
   license "{{LICENSE}}"
-  version "{{VERSION}}"
 
-  on_macos do
-    if Hardware::CPU.arm?
-      url "{{URL_ARM64}}"
-      sha256 "{{SHA256_ARM64}}"
-    elsif Hardware::CPU.intel?
-      url "{{URL_AMD64}}"
-      sha256 "{{SHA256_AMD64}}"
-    end
-  end
+  {{#if depends_on_brew}}{{#each depends_on_brew}}depends_on "{{this}}"{{/each}}{{/if}}
 
   def install
     bin.install "{{EXECUTABLE_NAME}}"
-    {{#if has_man_page}}man1.install "{{MAN_PAGE_NAME}}"{{/if}}
-    {{#if has_bash_completion}}bash_completion.install "{{BASH_COMPLETION_NAME}}"{{/if}}
-    {{#if has_zsh_completion}}zsh_completion.install "{{ZSH_COMPLETION_NAME}}"{{/if}}
-    {{#if has_fish_completion}}fish_completion.install "{{FISH_COMPLETION_NAME}}"{{/if}}
-    {{#if has_license}}doc.install "{{LICENSE_NAME}}"{{/if}}
   end
 
   test do
@@ -157,48 +190,42 @@ class {{CLASS_NAME}} < Formula
 end
 ```
 
-**5.3. 配置文件 (`.tapster.yaml`)**
-```yaml
-# Tapster Configuration
-repo: 'owner/project'
-tap_repo: 'owner/homebrew-tap'
-description: 'A brief description of the tool.'
-license: 'MIT'
-
-# Define executables and their associated assets
-executables:
-  mytool:
-    path: 'dist/mytool'
-    man_page: 'docs/mytool.1'
-    completions:
-      bash: 'completions/mytool.bash'
-      zsh: 'completions/_mytool'
-```
-这样 `tapster publish mytool --version 1.0.0` 即可自动查找所有关联文件。
-
 ---
 
-### **6. 阶段性部署路线图 (Roadmap)**
+### **6. 实际状态和未来路线图**
 
-**Version 1.0 (MVP - 核心功能)**
-*   **目标**: 提供一个健壮、CI/CD 友好的核心发布工具。
-*   **包含功能**:
-    *   `publish`, `init`, `doctor` 命令。
-    *   **关键特性**: 多架构支持 (`--asset-*`)。
-    *   **关键特性**: 非交互式认证 (via `GITHUB_TOKEN`)。
-    *   **关键特性**: 演练模式 (`--dry-run`)。
-    *   基本的事务性与临时文件清理。
+#### **当前状态 (v1.0 - 已发布)**
+**✅ 已完成功能**
+*   基础发布流程 (`publish`, `init`, `doctor` 命令)
+*   交互式配置文件生成
+*   GitHub CLI 集成和认证
+*   基础 Formula 生成
+*   SHA256 校验和计算
+*   自动 Tap 仓库创建
+*   环境检查和依赖验证
+*   用户友好的错误处理和进度显示
 
-**Version 1.1 (体验增强)**
-*   **目标**: 完善用户体验和发布产物的完整性。
-*   **包含功能**:
-    *   辅助资源打包 (man pages, completions)。
-    *   机器可读输出 (`--json`)。
-    *   自动生成发行说明 (`--generate-notes`)。
+**🔄 当前技术选择**
+*   使用 GitHub CLI 而非直接 API 调用
+*   单一架构支持（多架构计划中）
+*   配置文件驱动的发布流程
+*   基于 Dart args 包的 CLI 框架
 
-**Version 2.0 (成熟与易用性)**
-*   **目标**: 降低使用门槛，并提供更强的管理能力。
-*   **包含功能**:
-    *   交互式向导模式 (`tapster wizard`)。
-    *   完整的事务性回滚逻辑。
-    *   `tapster info` / `tapster list` 等查询与管理命令。
+#### **未来规划 (v1.1+)**
+**🎯 短期目标 (1-2 个月)**
+*   JSON 输出格式 (`--json`)
+*   多架构支持 (amd64, arm64)
+*   演练模式 (`--dry-run`)
+*   测试覆盖率提升到 90%+
+
+**🚀 中期目标 (3-6 个月)**
+*   辅助资源支持 (man pages, shell completions)
+*   事务性发布和失败回滚
+*   批量发布支持
+*   自定义 Formula 模板
+
+**🌟 长期目标 (6-12 个月)**
+*   跨平台支持 (Linux, Windows 包管理器)
+*   企业级功能 (团队协作, 安全增强)
+*   Web 管理界面
+*   插件系统
