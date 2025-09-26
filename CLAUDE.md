@@ -51,7 +51,7 @@ dart compile exe bin/tapster.dart -o tapster
 - `config_service.dart`: 配置文件管理（YAML 读/写/验证）
 - `github_service.dart`: GitHub API 集成（认证、版本发布、资源上传）
 - `formula_service.dart`: Homebrew formula 模板生成
-- `asset_service.dart`: 二进制资源处理（哈希计算、架构验证）
+- `asset_service.dart`: 二进制资源处理（哈希计算、文件验证）
 - `homebrew_service.dart`: Homebrew tap 操作（git 操作、formula 管理）
 - `dependency_service.dart`: 依赖管理
 
@@ -61,7 +61,7 @@ dart compile exe bin/tapster.dart -o tapster
   - 构建配置（源文件、库目录等）
   - 依赖配置（brew 包、系统依赖）
   - 发布配置（tap、版本发布、资源上传）
-  - 资源配置（路径、目标、架构等）
+  - 资源配置（路径、目标等）
 
 #### 工具 (lib/utils/)
 - `config_validator.dart`: 配置验证逻辑
@@ -69,7 +69,7 @@ dart compile exe bin/tapster.dart -o tapster
 ### 关键特性
 
 1. **配置驱动**: 所有操作基于 `.tapster.yaml` 配置文件
-2. **多架构支持**: 自动处理 arm64/amd64 架构的资源
+2. **资源管理**: 自动处理二进制文件的哈希计算和上传
 3. **GitHub 集成**: 直接使用 GitHub API 进行版本发布
 4. **模板生成**: 自动生成 Homebrew formula 文件
 5. **环境检查**: 验证开发环境和依赖
