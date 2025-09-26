@@ -14,7 +14,12 @@ class PublishCommand extends Command {
   final description = 'Publish Homebrew package';
 
   PublishCommand() {
-    // No parameters - only uses .tapster.yaml config file
+    argParser.addFlag(
+      'force',
+      abbr: 'f',
+      help: 'Force overwrite existing release with the same version',
+      negatable: false,
+    );
   }
 
   @override
@@ -45,18 +50,18 @@ class PublishCommand extends Command {
       final config = await configService.loadConfig(null);
       spinner.stop();
       print(
-        '\x1B[32m[✓]\x1B[0m Configuration loaded ($configPath, ${config.version})',
+        '\x1B[32m[✓]\x1B[0m Configuration loaded ($configPath, version: ${config.version})',
       );
 
-      await _executePublishWorkflow();
+      final force = argResults!['force'] as bool;
+      await _executePublishWorkflow(force: force);
     } catch (e) {
-      print('\x1B[31m[✗]\x1B[0m Publishing failed');
-      print('    Error: $e');
+      print('\n\x1B[31m✗\x1B[0m Publishing failed');
       exit(1);
     }
   }
 
-  Future<void> _executePublishWorkflow() async {
+  Future<void> _executePublishWorkflow({bool force = false}) async {
     try {
       // Load configuration
       final configService = ConfigService();
@@ -77,13 +82,15 @@ class PublishCommand extends Command {
       }
 
       // Parse tap information from config
-      final tapUri = Uri.parse('https://github.com/${config.publish.tap}');
-      final tapParts = tapUri.path
-          .split('/')
-          .where((p) => p.isNotEmpty)
-          .toList();
-      if (tapParts.length < 2) {
-        throw Exception('Invalid tap format');
+      String fullTapPath;
+      if (config.tap.contains('/')) {
+        // Full format: owner/tap
+        fullTapPath = config.tap;
+      } else {
+        // Simplified format: just tap name, infer owner from repository
+        final owner =
+            repoParts[0]; // First part of repository path is the owner
+        fullTapPath = '$owner/${config.tap}';
       }
 
       final steps = <PublishStep>[
@@ -117,28 +124,22 @@ class PublishCommand extends Command {
               repo: targetRepoString,
               draft: false,
               prerelease: false,
+              force: force,
             );
 
-            // Upload assets
-            final assets = <String, dynamic>{};
-            for (final asset in config.assets) {
-              final assetFile = File(asset.path);
-              if (await assetFile.exists()) {
-                await githubService.uploadAsset(
-                  tagName: tagName,
-                  assetPath: asset.path,
-                  repo: targetRepoString,
-                );
-                assets[asset.path] = {
-                  'size': await assetFile.length(),
-                  'checksum': asset.checksum ?? 'no checksum',
-                };
-              } else {
-                throw Exception('Asset file not found: ${asset.path}');
-              }
+            // Upload asset
+            final assetFile = File(config.asset);
+            if (await assetFile.exists()) {
+              await githubService.uploadAsset(
+                tagName: tagName,
+                assetPath: config.asset,
+                repo: targetRepoString,
+              );
+            } else {
+              throw Exception('Asset file not found: ${config.asset}');
             }
 
-            return {'release_id': releaseId, 'tag': tagName, 'assets': assets};
+            return {'release_id': releaseId, 'tag': tagName};
           },
         ),
 
@@ -146,31 +147,12 @@ class PublishCommand extends Command {
           name: 'Generate Formula',
           description: 'Generating Homebrew formula',
           action: () async {
-            final assetMap = <String, String>{};
-
-            // Create asset map for multi-architecture support
-            for (final asset in config.assets) {
-              if (asset.type == 'binary') {
-                if (asset.path.contains('amd64') ||
-                    asset.path.contains('x86_64')) {
-                  assetMap['amd64'] = asset.path;
-                } else if (asset.path.contains('arm64') ||
-                    asset.path.contains('aarch64')) {
-                  assetMap['arm64'] = asset.path;
-                } else {
-                  assetMap['default'] = asset.path;
-                }
-              }
+            final assetFile = File(config.asset);
+            if (!await assetFile.exists()) {
+              throw Exception('Asset file not found: ${config.asset}');
             }
 
-            if (assetMap.isEmpty) {
-              throw Exception('No binary assets found for formula generation.');
-            }
-
-            final formula = await formulaService.generateFormula(
-              config,
-              assetMap,
-            );
+            final formula = await formulaService.generateFormula(config);
             return {'formula': formula};
           },
         ),
@@ -179,20 +161,13 @@ class PublishCommand extends Command {
           name: 'Push Formula to Tap',
           description: 'Pushing formula to tap repository',
           action: () async {
-            final formulaContent = await formulaService
-                .generateFormula(config, {
-                  for (final asset in config.assets)
-                    if (asset.type == 'binary') 'default': asset.path,
-                });
+            final formulaContent = await formulaService.generateFormula(config);
 
             // Generate formula filename
             final formulaFileName = '${config.name}.rb';
 
             // Convert tap name to repository name (e.g., calsranna/inspire -> calsranna/homebrew-inspire)
-            final tapParts = config.publish.tap.split('/');
-            if (tapParts.length != 2) {
-              throw Exception('Invalid tap format. Expected format: owner/tap');
-            }
+            final tapParts = fullTapPath.split('/');
             final tapOwner = tapParts[0];
             final tapName = tapParts[1];
             final tapRepoName = tapName.startsWith('homebrew-')
@@ -278,7 +253,7 @@ class PublishCommand extends Command {
 
             return {
               'formula_file': formulaFileName,
-              'tap_repo': config.publish.tap,
+              'tap_repo': fullTapPath,
               'formula_content': formulaContent,
             };
           },
@@ -330,12 +305,14 @@ void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
       print('\x1B[32m[✓]\x1B[0m GitHub release created (${result['tag']})');
       print('    Tag: ${result['tag']}');
       print('    Release ID: ${result['release_id']}');
-      final assets = result['assets'] as Map<String, dynamic>;
-      if (assets.isNotEmpty) {
-        print('    Assets uploaded: ${assets.length}');
-        for (final assetName in assets.keys) {
-          final assetInfo = assets[assetName] as Map<String, dynamic>;
-          print('    • $assetName (${assetInfo['size']} bytes)');
+      if (result['assets'] is Map<String, dynamic>) {
+        final assets = result['assets'] as Map<String, dynamic>;
+        if (assets.isNotEmpty) {
+          print('    Assets uploaded: ${assets.length}');
+          for (final assetName in assets.keys) {
+            final assetInfo = assets[assetName] as Map<String, dynamic>;
+            print('    • $assetName (${assetInfo['size']} bytes)');
+          }
         }
       }
       break;
@@ -359,5 +336,5 @@ void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
 
 void _displayStepFailure(String stepName, dynamic error) {
   print('\x1B[31m[✗]\x1B[0m $stepName failed');
-  print('    Error: $error');
+  print('    \x1B[31m✗\x1B[0m $error');
 }

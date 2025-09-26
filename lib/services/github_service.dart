@@ -29,11 +29,15 @@ class GitHubService {
 
         // Extract username from auth status
         final authOutput = authResult.stdout;
-        final usernameMatch = RegExp(r'Logged in to .*? account ([\w-]+)').firstMatch(authOutput);
+        final usernameMatch = RegExp(
+          r'Logged in to .*? account ([\w-]+)',
+        ).firstMatch(authOutput);
         if (usernameMatch != null) {
           result['username'] = usernameMatch.group(1);
         } else {
-          result['issues'].add('Could not extract username from GitHub auth status');
+          result['issues'].add(
+            'Could not extract username from GitHub auth status',
+          );
         }
 
         // Check authentication method
@@ -57,13 +61,19 @@ class GitHubService {
           // Parse user info
           final userOutput = userResult.stdout;
           if (userOutput.contains('"login":')) {
-            final loginMatch = RegExp(r'"login":\s*"([^"]+)"').firstMatch(userOutput);
+            final loginMatch = RegExp(
+              r'"login":\s*"([^"]+)"',
+            ).firstMatch(userOutput);
             if (loginMatch != null) {
               result['api_username'] = loginMatch.group(1);
               // Use API username if auth status username is not available
               if (result['username'] == null) {
                 result['username'] = loginMatch.group(1);
-                result['issues'].removeWhere((issue) => issue == 'Could not extract username from GitHub auth status');
+                result['issues'].removeWhere(
+                  (issue) =>
+                      issue ==
+                      'Could not extract username from GitHub auth status',
+                );
               }
             }
           }
@@ -78,7 +88,12 @@ class GitHubService {
 
       // Check repository permissions
       try {
-        final repoResult = await _runGitHubCLICommand(['repo', 'view', '--json', 'name,owner,isAdmin']);
+        final repoResult = await _runGitHubCLICommand([
+          'repo',
+          'view',
+          '--json',
+          'name,owner,isAdmin',
+        ]);
         if (repoResult.exitCode == 0) {
           result['repo_access'] = true;
           final repoOutput = repoResult.stdout;
@@ -90,7 +105,6 @@ class GitHubService {
         // Not in a git repo, this is okay
         result['repo_access'] = false;
       }
-
     } catch (e) {
       result['issues'].add('Failed to check GitHub CLI: $e');
     }
@@ -229,13 +243,13 @@ class GitHubService {
       );
 
       if (response.statusCode != 201) {
-        throw GitHubException('Failed to create release: ${response.body}');
+        throw GitHubException(response.body);
       }
 
       final data = jsonDecode(response.body) as Map<String, dynamic>;
       return Release.fromJson(data);
     } catch (e) {
-      throw GitHubException('Failed to create release: $e');
+      throw GitHubException(e.toString());
     }
   }
 
@@ -274,6 +288,21 @@ class GitHubService {
     }
   }
 
+  Future<bool> _releaseExists(String tagName, String repo) async {
+    try {
+      final result = await _runGitHubCLICommand([
+        'release',
+        'view',
+        tagName,
+        '--repo',
+        repo,
+      ]);
+      return result.exitCode == 0;
+    } catch (e) {
+      return false;
+    }
+  }
+
   Future<int> createReleaseCLI({
     required String tagName,
     required String name,
@@ -281,15 +310,33 @@ class GitHubService {
     String? repo,
     bool draft = false,
     bool prerelease = false,
+    bool force = false,
   }) async {
     try {
       // Check if release with this tag already exists
       if (repo != null) {
-        try {
-          // Try to delete existing release with this tag
-          await _runGitHubCLICommand(['release', 'delete', tagName, '--repo', repo, '--yes']);
-        } catch (e) {
-          // Ignore errors when deleting (release might not exist)
+        final exists = await _releaseExists(tagName, repo);
+        if (exists) {
+          if (!force) {
+            throw ReleaseExistsException(
+              '"$tagName" already exists. '
+              'Try updating the version or use --force to overwrite.',
+            );
+          } else {
+            // Delete existing release when force is true
+            try {
+              await _runGitHubCLICommand([
+                'release',
+                'delete',
+                tagName,
+                '--repo',
+                repo,
+                '--yes',
+              ]);
+            } catch (e) {
+              // If deletion fails, continue anyway
+            }
+          }
         }
       }
 
@@ -317,28 +364,43 @@ class GitHubService {
 
       final result = await _runGitHubCLICommand(args);
       if (result.exitCode != 0) {
-        throw GitHubException('Failed to create release: Exit code ${result.exitCode}, stderr: ${result.stderr}, stdout: ${result.stdout}');
+        throw GitHubException(
+          'Failed to create release: Exit code ${result.exitCode}, stderr: ${result.stderr}, stdout: ${result.stdout}',
+        );
       }
 
       // Get release ID using GitHub API
       if (repo != null) {
         try {
-          final releasesResult = await _runGitHubCLICommand(['api', 'repos/$repo/releases'.replaceAll('\$repo', repo)]);
+          final releasesResult = await _runGitHubCLICommand([
+            'api',
+            'repos/$repo/releases',
+          ]);
           if (releasesResult.exitCode == 0) {
-            final releasesData = jsonDecode(releasesResult.stdout) as List;
-            for (final release in releasesData) {
-              if (release['tag_name'] == tagName) {
-                return release['id'] as int;
+            final decoded = jsonDecode(releasesResult.stdout);
+            if (decoded is List) {
+              final releasesData = decoded;
+              for (final release in releasesData) {
+                if (release is Map<String, dynamic> &&
+                    release['tag_name'] == tagName &&
+                    release['id'] is int) {
+                  return release['id'] as int;
+                }
               }
             }
           }
         } catch (e) {
           // If API fails, try to get release ID by tag
           try {
-            final releaseResult = await _runGitHubCLICommand(['api', 'repos/$repo/releases/tags/$tagName'.replaceAll('\$repo', repo).replaceAll('\$tagName', tagName)]);
+            final releaseResult = await _runGitHubCLICommand([
+              'api',
+              'repos/$repo/releases/tags/$tagName',
+            ]);
             if (releaseResult.exitCode == 0) {
-              final releaseData = jsonDecode(releaseResult.stdout) as Map<String, dynamic>;
-              return releaseData['id'] as int;
+              final decoded = jsonDecode(releaseResult.stdout);
+              if (decoded is Map<String, dynamic> && decoded['id'] is int) {
+                return decoded['id'] as int;
+              }
             }
           } catch (e2) {
             // Last resort: use a simple approach - create release doesn't really need ID
@@ -349,7 +411,7 @@ class GitHubService {
 
       return 1; // Placeholder ID if no repository specified
     } catch (e) {
-      throw GitHubException('Failed to create release: $e');
+      throw GitHubException(e.toString());
     }
   }
 
@@ -552,5 +614,14 @@ class GitHubException implements Exception {
   GitHubException(this.message);
 
   @override
-  String toString() => 'GitHubException: $message';
+  String toString() => message;
+}
+
+class ReleaseExistsException implements Exception {
+  final String message;
+
+  ReleaseExistsException(this.message);
+
+  @override
+  String toString() => message;
 }

@@ -79,7 +79,7 @@ class InitCommand extends Command {
     final dependencies = await _collectDependencies();
 
     // Collect publish information
-    final tap = await _askString('Publish tap', 'homebrew/core');
+    final tap = await _askString('Publish tap', '');
 
     // Calculate checksum for binary file
     String? checksum;
@@ -102,47 +102,22 @@ class InitCommand extends Command {
       homepage: homepage,
       repository: repository,
       license: license,
-      authors: [], // Authors are not needed for GitHub projects
-      build: BuildConfig(
-        main: '',
-        sourceFiles: [],
-        includeDirs: [],
-        libDirs: [],
-        frameworks: [],
-        defines: {},
-      ),
       dependencies: dependencies,
-      publish: PublishConfig(
-        tap: tap,
-        createRelease: true,
-        uploadAssets: true,
-      ),
-      assets: [
-        AssetConfig(
-          path: binaryPath,
-          target: name,
-          type: 'binary',
-          archs: {'amd64': 'x86_64', 'arm64': 'arm64'},
-          checksum: checksum,
-        ),
-      ],
+      tap: tap,
+      asset: binaryPath,
+      checksum: checksum,
     );
   }
 
-  Future<DependenciesConfig> _collectDependencies() async {
-    final depsInput = await _askString('Homebrew dependencies (comma-separated, leave empty if none)', '');
+  Future<List<String>> _collectDependencies() async {
+    final depsInput = await _askString('Dependencies (comma-separated, leave empty if none)', '');
 
-    final brewDeps = <String>[];
+    final deps = <String>[];
     if (depsInput.trim().isNotEmpty) {
-      brewDeps.addAll(depsInput.split(',').map((dep) => dep.trim()).where((dep) => dep.isNotEmpty));
+      deps.addAll(depsInput.split(',').map((dep) => dep.trim()).where((dep) => dep.isNotEmpty));
     }
 
-    return DependenciesConfig(
-      brew: brewDeps,
-      system: {},
-      macos: {},
-      linux: {},
-    );
+    return deps;
   }
 
   

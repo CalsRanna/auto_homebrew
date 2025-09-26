@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:crypto/crypto.dart';
-import 'package:tapster/models/tapster_config.dart';
 
 class AssetService {
   Future<AssetInfo> getAssetInfo(String path) async {
@@ -22,30 +21,7 @@ class AssetService {
     );
   }
 
-  Future<List<AssetInfo>> validateAssets(List<AssetConfig> assetConfigs) async {
-    final results = <AssetInfo>[];
-    final errors = <String>[];
-
-    for (final config in assetConfigs) {
-      try {
-        final assetInfo = await getAssetInfo(config.path);
-        results.add(assetInfo);
-      } catch (e) {
-        errors.add('Asset validation failed for ${config.path}: $e');
-        results.add(AssetInfo(
-          path: config.path,
-          exists: false,
-        ));
-      }
-    }
-
-    if (errors.isNotEmpty) {
-      throw AssetException('Asset validation failed:\n${errors.join('\n')}');
-    }
-
-    return results;
-  }
-
+  
   Future<bool> createChecksumFile(String assetPath, String checksumPath) async {
     try {
       final assetFile = File(assetPath);

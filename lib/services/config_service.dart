@@ -55,8 +55,8 @@ class ConfigService {
     }
 
     try {
-      final yamlString = _configToYaml(config);
-      await file.writeAsString(yamlString);
+      final content = _generateConfigContent(config);
+      await file.writeAsString(content);
     } on FileSystemException catch (e) {
       throw ConfigException('Failed to write configuration file: ${e.message}');
     }
@@ -68,49 +68,7 @@ class ConfigService {
     return await file.exists();
   }
 
-  Future<TapsterConfig> createDefaultConfig(String? configPath, {bool force = false}) async {
-    final path = configPath ?? defaultConfigFile;
-    final file = File(path);
-
-    if (await file.exists() && !force) {
-      throw ConfigException('Configuration file already exists: $path');
-    }
-
-    final defaultConfig = TapsterConfig(
-      name: 'my-package',
-      version: '1.0.0',
-      description: 'A sample Homebrew package',
-      homepage: 'https://github.com/user/my-package',
-      repository: 'https://github.com/user/my-package.git',
-      license: 'MIT',
-      authors: ['Your Name <your.email@example.com>'],
-      build: BuildConfig(
-        main: 'src/main.c',
-        sourceFiles: ['src/*.c'],
-        includeDirs: ['include'],
-        libDirs: ['lib'],
-        frameworks: [],
-        defines: {},
-      ),
-      dependencies: DependenciesConfig(
-        brew: [],
-        system: {},
-        macos: {},
-        linux: {},
-      ),
-      publish: PublishConfig(
-        tap: 'homebrew/core',
-        createRelease: true,
-        uploadAssets: true,
-      ),
-      assets: [],
-    );
-
-    await saveConfig(defaultConfig, path);
-    return defaultConfig;
-  }
-
-  String _configToYaml(TapsterConfig config) {
+  String _generateConfigContent(TapsterConfig config) {
     final buffer = StringBuffer();
 
     buffer.writeln('# Tapster Configuration File');
@@ -124,123 +82,20 @@ class ConfigService {
     buffer.writeln('repository: ${config.repository}');
     buffer.writeln('license: ${config.license}');
 
-    // Only include build section if there's actual content
-    if (config.build.main.isNotEmpty ||
-        config.build.sourceFiles.isNotEmpty ||
-        config.build.includeDirs.isNotEmpty ||
-        config.build.libDirs.isNotEmpty ||
-        config.build.frameworks.isNotEmpty ||
-        config.build.defines.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('build:');
-
-      if (config.build.main.isNotEmpty) {
-        buffer.writeln('  main: ${config.build.main}');
-      }
-
-      if (config.build.sourceFiles.isNotEmpty) {
-        buffer.writeln('  source_files:');
-        for (final file in config.build.sourceFiles) {
-          buffer.writeln('    - $file');
-        }
-      }
-
-      if (config.build.includeDirs.isNotEmpty) {
-        buffer.writeln('  include_dirs:');
-        for (final dir in config.build.includeDirs) {
-          buffer.writeln('    - $dir');
-        }
-      }
-
-      if (config.build.libDirs.isNotEmpty) {
-        buffer.writeln('  lib_dirs:');
-        for (final dir in config.build.libDirs) {
-          buffer.writeln('    - $dir');
-        }
-      }
-
-      if (config.build.frameworks.isNotEmpty) {
-        buffer.writeln('  frameworks:');
-        for (final framework in config.build.frameworks) {
-          buffer.writeln('    - $framework');
-        }
-      }
-
-      if (config.build.defines.isNotEmpty) {
-        buffer.writeln('  defines:');
-        config.build.defines.forEach((key, value) {
-          buffer.writeln('    $key: $value');
-        });
-      }
-    }
-
-    // Only include dependencies section if there's actual content
-    if (config.dependencies.brew.isNotEmpty ||
-        config.dependencies.system.isNotEmpty ||
-        config.dependencies.macos.isNotEmpty ||
-        config.dependencies.linux.isNotEmpty) {
+    if (config.dependencies.isNotEmpty) {
       buffer.writeln();
       buffer.writeln('dependencies:');
-
-      if (config.dependencies.brew.isNotEmpty) {
-        buffer.writeln('  brew:');
-        for (final dep in config.dependencies.brew) {
-          buffer.writeln('    - $dep');
-        }
-      }
-
-      if (config.dependencies.system.isNotEmpty) {
-        buffer.writeln('  system:');
-        config.dependencies.system.forEach((key, value) {
-          buffer.writeln('    $key: $value');
-        });
-      }
-
-      if (config.dependencies.macos.isNotEmpty) {
-        buffer.writeln('  macos:');
-        config.dependencies.macos.forEach((key, value) {
-          buffer.writeln('    $key: $value');
-        });
-      }
-
-      if (config.dependencies.linux.isNotEmpty) {
-        buffer.writeln('  linux:');
-        config.dependencies.linux.forEach((key, value) {
-          buffer.writeln('    $key: $value');
-        });
+      for (final dep in config.dependencies) {
+        buffer.writeln('  - $dep');
       }
     }
 
     buffer.writeln();
-    buffer.writeln('publish:');
-    buffer.writeln('  tap: ${config.publish.tap}');
-    buffer.writeln('  create_release: ${config.publish.createRelease}');
-    buffer.writeln('  upload_assets: ${config.publish.uploadAssets}');
+    buffer.writeln('tap: ${config.tap}');
+    buffer.writeln('asset: ${config.asset}');
 
-    if (config.publish.releaseTitle != null) {
-      buffer.writeln('  release_title: ${config.publish.releaseTitle}');
-    }
-
-    if (config.publish.releaseNotes != null) {
-      buffer.writeln('  release_notes: ${config.publish.releaseNotes}');
-    }
-
-    if (config.assets.isNotEmpty) {
-      buffer.writeln();
-      buffer.writeln('assets:');
-      for (final asset in config.assets) {
-        buffer.writeln('  - path: ${asset.path}');
-        buffer.writeln('    target: ${asset.target}');
-        buffer.writeln('    type: ${asset.type}');
-        buffer.writeln('    checksum: ${asset.checksum}');
-
-        if (asset.archs.isNotEmpty) {
-          buffer.writeln('    archs:');
-          asset.archs.forEach((key, value) {
-            buffer.writeln('      $key: $value');
-          });
-        }
-      }
+    if (config.checksum != null) {
+      buffer.writeln('checksum: ${config.checksum}');
     }
 
     return buffer.toString();
@@ -253,5 +108,5 @@ class ConfigException implements Exception {
   ConfigException(this.message);
 
   @override
-  String toString() => 'ConfigException: $message';
+  String toString() => message;
 }
