@@ -1,10 +1,9 @@
 import 'dart:io';
-import 'package:ansix/ansix.dart';
 import 'package:args/command_runner.dart';
 import 'package:crypto/crypto.dart';
 import 'package:tapster/services/config_service.dart';
 import 'package:tapster/models/tapster_config.dart';
-import 'package:tapster/utils/status_markers.dart';
+import 'package:tapster/utils/string_buffer_extensions.dart';
 
 class InitCommand extends Command {
   @override
@@ -35,11 +34,7 @@ class InitCommand extends Command {
 
     if (configExists && !force) {
       final buffer = StringBuffer()
-        ..writeWithForegroundColor(
-          '${StatusMarker.warning} ',
-          AnsiColor.yellow1,
-        )
-        ..write('Configuration file .tapster.yaml already exists.');
+        ..writeWarning('Configuration file .tapster.yaml already exists.');
       print(buffer.toString());
       if (!await _askBool('Overwrite existing configuration?', false)) {
         print('\nConfiguration generation cancelled.');
@@ -86,11 +81,7 @@ class InitCommand extends Command {
       checksum = await _calculateFileChecksum(binaryPath);
     } else {
       final buffer = StringBuffer()
-        ..writeWithForegroundColor(
-          '${StatusMarker.warning} ',
-          AnsiColor.yellow1,
-        )
-        ..write('Binary file not found at $binaryPath');
+        ..writeWarning('Binary file not found at $binaryPath');
       print(buffer.toString());
       checksum = null;
     }
@@ -197,8 +188,7 @@ class InitCommand extends Command {
       return digest.toString();
     } catch (e) {
       final buffer = StringBuffer()
-        ..writeWithForegroundColor('${StatusMarker.warning} ', AnsiColor.yellow1)
-        ..write('Could not calculate checksum for $filePath: $e');
+        ..writeWarning('Could not calculate checksum for $filePath: $e');
       print(buffer.toString());
       return null;
     }
@@ -209,13 +199,11 @@ class InitCommand extends Command {
       final configService = ConfigService();
       await configService.saveConfig(config, '.tapster.yaml');
       final buffer = StringBuffer()
-        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
-        ..write('Configuration saved to .tapster.yaml');
+        ..writeSuccess('Configuration saved to .tapster.yaml');
       print(buffer.toString());
     } catch (e) {
       final buffer = StringBuffer()
-        ..writeWithForegroundColor('${StatusMarker.error} ', AnsiColor.red)
-        ..write('Failed to save configuration: $e');
+        ..writeError('Failed to save configuration: $e');
       print(buffer.toString());
       exit(1);
     }
@@ -228,7 +216,7 @@ class InitCommand extends Command {
       // Use ansix for gray default value
       final buffer = StringBuffer()
         ..write('$prompt: ')
-        ..writeWithForegroundColor('[$defaultValue]', AnsiColor.grey50)
+        ..writeGreyDefault('[$defaultValue]')
         ..write(' ');
       stdout.write(buffer.toString());
     }
@@ -241,7 +229,7 @@ class InitCommand extends Command {
     // Use ansix for gray default value
     final buffer = StringBuffer()
       ..write('$prompt: ')
-      ..writeWithForegroundColor('[$defaultStr]', AnsiColor.grey50)
+      ..writeGreyDefault('[$defaultStr]')
       ..write(' ');
     stdout.write(buffer.toString());
     final input = stdin.readLineSync()!.trim().toLowerCase();
