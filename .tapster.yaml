@@ -1,0 +1,16 @@
+# Tapster Configuration File
+# This file defines how your package should be built and published
+
+name: tapster
+version: 1.0.0
+description: A command-line tool for automating Homebrew package publishing
+homepage: https://github.com/CalsRanna/auto_homebrew
+repository: https://github.com/CalsRanna/auto_homebrew.git
+license: MIT
+
+dependencies:
+  - gh
+
+tap: inspire
+asset: build/tapster
+checksum: 79f29328aecff393eb35bf2d6955ed249bd4e3b23a74257e4f29447883d8590b
