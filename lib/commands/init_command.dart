@@ -196,7 +196,10 @@ class InitCommand extends Command {
       final digest = sha256.convert(bytes);
       return digest.toString();
     } catch (e) {
-      print('Warning: Could not calculate checksum for $filePath: $e');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.warning} ', AnsiColor.yellow1)
+        ..write('Could not calculate checksum for $filePath: $e');
+      print(buffer.toString());
       return null;
     }
   }

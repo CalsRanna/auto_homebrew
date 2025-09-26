@@ -1,7 +1,9 @@
+import 'package:ansix/ansix.dart';
 import 'package:tapster/services/git_service.dart';
 import 'package:tapster/services/github_service.dart';
 import 'package:tapster/services/homebrew_service.dart';
 import 'package:tapster/services/network_service.dart';
+import 'package:tapster/utils/status_markers.dart';
 
 class DependencyService {
   final GitService _gitService = GitService();
@@ -77,11 +79,17 @@ class DependencyService {
       if (throwOnError) {
         throw DependencyException(message);
       } else {
-        print('Dependency check failed:');
+        final buffer = StringBuffer()
+          ..writeWithForegroundColor('${StatusMarker.error} ', AnsiColor.red)
+          ..write('Dependency check failed:');
+        print(buffer.toString());
         print(message);
       }
     } else {
-      print('All dependencies are properly configured.');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write('All dependencies are properly configured.');
+      print(buffer.toString());
       print(result);
     }
   }
