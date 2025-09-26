@@ -1,6 +1,8 @@
+import 'package:ansix/ansix.dart';
 import 'package:args/command_runner.dart';
 import 'package:cli_spin/cli_spin.dart';
 import 'package:tapster/services/dependency_service.dart';
+import 'package:tapster/utils/status_markers.dart';
 
 class DoctorCommand extends Command {
   @override
@@ -45,11 +47,18 @@ class DoctorCommand extends Command {
     // Summary
     final totalIssues = issuesCount.values.fold(0, (sum, count) => sum + count);
     if (totalIssues == 0) {
-      print('\n\x1B[32m•\x1B[0m No issues found!');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('\n${StatusMarker.bullet} ', AnsiColor.green)
+        ..write('No issues found!');
+      print(buffer.toString());
     } else {
-      print(
-        '\n\x1B[33m•\x1B[0m $totalIssues issue${totalIssues > 1 ? 's' : ''} found!',
-      );
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor(
+          '\n${StatusMarker.warning} ',
+          AnsiColor.yellow1,
+        )
+        ..write('$totalIssues issue${totalIssues > 1 ? 's' : ''} found!');
+      print(buffer.toString());
     }
   }
 
@@ -90,13 +99,37 @@ class DoctorCommand extends Command {
     switch (component) {
       case 'git':
         if (result['valid'] && (result['issues'] as List).isEmpty) {
-          print('\x1B[32m[✓]\x1B[0m Git (${result['version']})');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.success} ',
+              AnsiColor.green,
+            )
+            ..write('Git (${result['version']})');
+          print(buffer.toString());
           if (verbose) {
-            print('    \x1B[32m•\x1B[0m Git ${result['version']}');
-            print('    \x1B[32m•\x1B[0m User config: configured');
+            final buffer2 = StringBuffer()
+              ..writeWithForegroundColor(
+                '    ${StatusMarker.bullet} ',
+                AnsiColor.green,
+              )
+              ..write('Git ${result['version']}');
+            print(buffer2.toString());
+            final buffer3 = StringBuffer()
+              ..writeWithForegroundColor(
+                '    ${StatusMarker.bullet} ',
+                AnsiColor.green,
+              )
+              ..write('User config: configured');
+            print(buffer3.toString());
           }
         } else {
-          print('\x1B[33m[!]\x1B[0m Git');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.warning} ',
+              AnsiColor.yellow1,
+            )
+            ..write('Git');
+          print(buffer.toString());
           if (verbose) {
             print('    ${result['version']}');
             for (final issue in result['issues']) {
@@ -116,26 +149,66 @@ class DoctorCommand extends Command {
         if (result['valid'] && (result['issues'] as List).isEmpty) {
           final version = result['version'] as String;
           final cleanVersion = version.split('\n').first;
-          print('\x1B[32m[✓]\x1B[0m GitHub CLI ($cleanVersion)');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.success} ',
+              AnsiColor.green,
+            )
+            ..write('GitHub CLI ($cleanVersion)');
+          print(buffer.toString());
           if (verbose) {
-            print('    \x1B[32m•\x1B[0m gh $cleanVersion');
+            final buffer2 = StringBuffer()
+              ..writeWithForegroundColor(
+                '    ${StatusMarker.bullet} ',
+                AnsiColor.green,
+              )
+              ..write('gh $cleanVersion');
+            print(buffer2.toString());
             if (result['authenticated'] == true) {
-              print('    \x1B[32m•\x1B[0m GitHub CLI: authenticated');
+              final buffer3 = StringBuffer()
+                ..writeWithForegroundColor(
+                  '    ${StatusMarker.bullet} ',
+                  AnsiColor.green,
+                )
+                ..write('GitHub CLI: authenticated');
+              print(buffer3.toString());
               if (result['username'] != null) {
-                print('    \x1B[32m•\x1B[0m Account: ${result['username']}');
+                final buffer4 = StringBuffer()
+                  ..writeWithForegroundColor(
+                    '    ${StatusMarker.bullet} ',
+                    AnsiColor.green,
+                  )
+                  ..write('Account: ${result['username']}');
+                print(buffer4.toString());
               }
               if (result['auth_method'] != null) {
-                print(
-                  '    \x1B[32m•\x1B[0m Auth method: ${result['auth_method']}',
-                );
+                final buffer5 = StringBuffer()
+                  ..writeWithForegroundColor(
+                    '    ${StatusMarker.bullet} ',
+                    AnsiColor.green,
+                  )
+                  ..write('Auth method: ${result['auth_method']}');
+                print(buffer5.toString());
               }
             }
             if (result['api_access'] == true) {
-              print('    \x1B[32m•\x1B[0m GitHub API: accessible');
+              final buffer6 = StringBuffer()
+                ..writeWithForegroundColor(
+                  '    ${StatusMarker.bullet} ',
+                  AnsiColor.green,
+                )
+                ..write('GitHub API: accessible');
+              print(buffer6.toString());
             }
           }
         } else {
-          print('\x1B[33m[!]\x1B[0m GitHub CLI');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.warning} ',
+              AnsiColor.yellow1,
+            )
+            ..write('GitHub CLI');
+          print(buffer.toString());
           if (verbose) {
             print('    ${result['version']}');
             for (final issue in result['issues']) {
@@ -150,22 +223,58 @@ class DoctorCommand extends Command {
 
       case 'homebrew':
         if (result['valid'] && (result['issues'] as List).isEmpty) {
-          print('\x1B[32m[✓]\x1B[0m Homebrew (${result['version']})');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.success} ',
+              AnsiColor.green,
+            )
+            ..write('Homebrew (${result['version']})');
+          print(buffer.toString());
           if (verbose) {
-            print('    \x1B[32m•\x1B[0m Homebrew ${result['version']}');
+            final buffer2 = StringBuffer()
+              ..writeWithForegroundColor(
+                '    ${StatusMarker.bullet} ',
+                AnsiColor.green,
+              )
+              ..write('Homebrew ${result['version']}');
+            print(buffer2.toString());
             if (result['taps'] != null) {
               final taps = result['taps'] as List;
-              print('    \x1B[32m•\x1B[0m ${taps.length} taps installed');
+              final buffer3 = StringBuffer()
+                ..writeWithForegroundColor(
+                  '    ${StatusMarker.bullet} ',
+                  AnsiColor.green,
+                )
+                ..write('${taps.length} taps installed');
+              print(buffer3.toString());
               for (final tap in taps.take(3)) {
-                print('    \x1B[32m•\x1B[0m $tap');
+                final buffer4 = StringBuffer()
+                  ..writeWithForegroundColor(
+                    '    ${StatusMarker.bullet} ',
+                    AnsiColor.green,
+                  )
+                  ..write('$tap');
+                print(buffer4.toString());
               }
               if (taps.length > 3) {
-                print('    \x1B[32m•\x1B[0m ... and ${taps.length - 3} more');
+                final buffer5 = StringBuffer()
+                  ..writeWithForegroundColor(
+                    '    ${StatusMarker.bullet} ',
+                    AnsiColor.green,
+                  )
+                  ..write('... and ${taps.length - 3} more');
+                print(buffer5.toString());
               }
             }
           }
         } else {
-          print('\x1B[33m[!]\x1B[0m Homebrew');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.warning} ',
+              AnsiColor.yellow1,
+            )
+            ..write('Homebrew');
+          print(buffer.toString());
           if (verbose) {
             print('    ${result['version']}');
             for (final issue in result['issues']) {
@@ -177,23 +286,59 @@ class DoctorCommand extends Command {
 
       case 'network':
         if (result['valid'] && (result['issues'] as List).isEmpty) {
-          print('\x1B[32m[✓]\x1B[0m Network connectivity to GitHub');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.success} ',
+              AnsiColor.green,
+            )
+            ..write('Network connectivity to GitHub');
+          print(buffer.toString());
           if (verbose) {
-            print('    \x1B[32m•\x1B[0m GitHub: accessible');
+            final buffer2 = StringBuffer()
+              ..writeWithForegroundColor(
+                '    ${StatusMarker.bullet} ',
+                AnsiColor.green,
+              )
+              ..write('GitHub: accessible');
+            print(buffer2.toString());
             if (result['api_accessible'] == true) {
-              print('    \x1B[32m•\x1B[0m GitHub API: accessible');
+              final buffer3 = StringBuffer()
+                ..writeWithForegroundColor(
+                  '    ${StatusMarker.bullet} ',
+                  AnsiColor.green,
+                )
+                ..write('GitHub API: accessible');
+              print(buffer3.toString());
               if (result['rate_limit_remaining'] != null) {
-                print(
-                  '    \x1B[32m•\x1B[0m Rate limit: ${result['rate_limit_remaining']} remaining',
-                );
+                final buffer4 = StringBuffer()
+                  ..writeWithForegroundColor(
+                    '    ${StatusMarker.bullet} ',
+                    AnsiColor.green,
+                  )
+                  ..write(
+                    'Rate limit: ${result['rate_limit_remaining']} remaining',
+                  );
+                print(buffer4.toString());
               }
             }
             if (result['ssh_working'] == true) {
-              print('    \x1B[32m•\x1B[0m SSH to GitHub: working');
+              final buffer5 = StringBuffer()
+                ..writeWithForegroundColor(
+                  '    ${StatusMarker.bullet} ',
+                  AnsiColor.green,
+                )
+                ..write('SSH to GitHub: working');
+              print(buffer5.toString());
             }
           }
         } else {
-          print('\x1B[33m[!]\x1B[0m Network connectivity to GitHub');
+          final buffer = StringBuffer()
+            ..writeWithForegroundColor(
+              '${StatusMarker.warning} ',
+              AnsiColor.yellow1,
+            )
+            ..write('Network connectivity to GitHub');
+          print(buffer.toString());
           if (verbose) {
             for (final issue in result['issues']) {
               print('    $issue');

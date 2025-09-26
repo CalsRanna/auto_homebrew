@@ -1,8 +1,10 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:ansix/ansix.dart';
 import 'package:args/command_runner.dart';
 import 'package:cli_spin/cli_spin.dart';
 import 'package:tapster/services/config_service.dart';
+import 'package:tapster/utils/status_markers.dart';
 import 'package:tapster/services/github_service.dart';
 import 'package:tapster/services/formula_service.dart';
 
@@ -39,7 +41,10 @@ class PublishCommand extends Command {
 
       if (!await configFile.exists()) {
         spinner.stop();
-        print('\x1B[31m[✗]\x1B[0m Configuration file not found');
+        final buffer = StringBuffer()
+          ..writeWithForegroundColor('${StatusMarker.error} ', AnsiColor.red)
+          ..write('Configuration file not found');
+        print(buffer.toString());
         print('    No configuration file found at: $configPath');
         print('    Create a configuration file first: tapster init');
         print('');
@@ -49,14 +54,23 @@ class PublishCommand extends Command {
       // Load existing configuration
       final config = await configService.loadConfig(null);
       spinner.stop();
-      print(
-        '\x1B[32m[✓]\x1B[0m Configuration loaded ($configPath, version: ${config.version})',
-      );
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write(
+          'Configuration loaded ($configPath, version: ${config.version})',
+        );
+      print(buffer.toString());
 
       final force = argResults!['force'] as bool;
       await _executePublishWorkflow(force: force);
     } catch (e) {
-      print('\n\x1B[31m✗\x1B[0m Publishing failed');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor(
+          '\n${StatusMarker.errorBullet} ',
+          AnsiColor.red,
+        )
+        ..write('Publishing failed');
+      print(buffer.toString());
       exit(1);
     }
   }
@@ -166,7 +180,7 @@ class PublishCommand extends Command {
             // Generate formula filename
             final formulaFileName = '${config.name}.rb';
 
-            // Convert tap name to repository name (e.g., calsranna/inspire -> calsranna/homebrew-inspire)
+            // Convert tap name to repository name
             final tapParts = fullTapPath.split('/');
             final tapOwner = tapParts[0];
             final tapName = tapParts[1];
@@ -279,7 +293,10 @@ class PublishCommand extends Command {
       }
 
       print('');
-      print('\x1B[32m[✓]\x1B[0m Publishing completed successfully!');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write('Publishing completed successfully!');
+      print(buffer.toString());
     } catch (e) {
       rethrow;
     }
@@ -302,7 +319,10 @@ class PublishStep {
 void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
   switch (stepName) {
     case 'Create GitHub Release':
-      print('\x1B[32m[✓]\x1B[0m GitHub release created (${result['tag']})');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write('GitHub release created (${result['tag']})');
+      print(buffer.toString());
       print('    Tag: ${result['tag']}');
       print('    Release ID: ${result['release_id']}');
       if (result['assets'] is Map<String, dynamic>) {
@@ -311,23 +331,33 @@ void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
           print('    Assets uploaded: ${assets.length}');
           for (final assetName in assets.keys) {
             final assetInfo = assets[assetName] as Map<String, dynamic>;
-            print('    • $assetName (${assetInfo['size']} bytes)');
+            final buffer = StringBuffer()
+              ..writeWithForegroundColor(
+                '    ${StatusMarker.bullet} ',
+                AnsiColor.green,
+              )
+              ..write('$assetName (${assetInfo['size']} bytes)');
+            print(buffer.toString());
           }
         }
       }
       break;
 
     case 'Generate Formula':
-      print(
-        '\x1B[32m[✓]\x1B[0m Homebrew formula generated (${result['formula_file']})',
-      );
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write('Homebrew formula generated (${result['formula_file']})');
+      print(buffer.toString());
       final formula = result['formula'] as String;
       final lines = formula.split('\n');
       print('    Formula length: ${lines.length} lines');
       break;
 
     case 'Push Formula to Tap':
-      print('\x1B[32m[✓]\x1B[0m Homebrew tap pushed (${result['tap_repo']})');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write('Homebrew tap pushed (${result['tap_repo']})');
+      print(buffer.toString());
       print('    Tap repository: ${result['tap_repo']}');
       print('    Formula file: ${result['formula_file']}');
       break;
@@ -335,6 +365,15 @@ void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
 }
 
 void _displayStepFailure(String stepName, dynamic error) {
-  print('\x1B[31m[✗]\x1B[0m $stepName failed');
-  print('    \x1B[31m✗\x1B[0m $error');
+  final buffer = StringBuffer()
+    ..writeWithForegroundColor('${StatusMarker.error} ', AnsiColor.red)
+    ..write('$stepName failed');
+  print(buffer.toString());
+  final buffer2 = StringBuffer()
+    ..writeWithForegroundColor(
+      '    ${StatusMarker.errorBullet} ',
+      AnsiColor.red,
+    )
+    ..write('$error');
+  print(buffer2.toString());
 }

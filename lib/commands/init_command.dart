@@ -1,9 +1,10 @@
 import 'dart:io';
+import 'package:ansix/ansix.dart';
 import 'package:args/command_runner.dart';
-import 'package:cli_spin/cli_spin.dart';
 import 'package:crypto/crypto.dart';
 import 'package:tapster/services/config_service.dart';
 import 'package:tapster/models/tapster_config.dart';
+import 'package:tapster/utils/status_markers.dart';
 
 class InitCommand extends Command {
   @override
@@ -13,9 +14,11 @@ class InitCommand extends Command {
   final description = 'Create a Tapster configuration file interactively';
 
   InitCommand() {
-    argParser.addFlag('force',
+    argParser.addFlag(
+      'force',
       help: 'Force overwrite existing config file',
-      negatable: false);
+      negatable: false,
+    );
   }
 
   @override
@@ -24,26 +27,25 @@ class InitCommand extends Command {
 
     final force = argResults!['force'] as bool;
 
-    print('🚀 Welcome to Tapster Configuration Generator!');
-    print('This will help you create a .tapster.yaml configuration file.');
-    print('');
+    print('Welcome to Tapster Configuration Generator:');
 
     // Check if config already exists
     final configService = ConfigService();
     final configExists = await configService.configExists(null);
 
     if (configExists && !force) {
-      print('⚠️  Configuration file .tapster.yaml already exists.');
-      print('');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor(
+          '${StatusMarker.warning} ',
+          AnsiColor.yellow1,
+        )
+        ..write('Configuration file .tapster.yaml already exists.');
+      print(buffer.toString());
       if (!await _askBool('Overwrite existing configuration?', false)) {
-        print('Configuration generation cancelled.');
+        print('\nConfiguration generation cancelled.');
         return;
       }
     }
-
-    print('');
-    print('Please provide your project information:');
-    print('');
 
     final config = await _manualConfig();
 
@@ -51,16 +53,7 @@ class InitCommand extends Command {
     await _saveConfig(config);
 
     // Show next steps
-    print('');
-    print('✅ Configuration file created successfully!');
-    print('');
-    print('📦 Package: ${config.name} v${config.version}');
-    print('📄 Configuration file: .tapster.yaml');
-    print('');
-    print('💡 Next steps:');
-    print('1. Review and edit .tapster.yaml if needed');
-    print('2. Run: tapster check --verbose');
-    print('3. Run: tapster publish');
+    print('\nConfiguration file created successfully!');
   }
 
   Future<TapsterConfig> _manualConfig() async {
@@ -68,10 +61,16 @@ class InitCommand extends Command {
     final githubUsername = await _getGithubUsername();
     final defaultOwner = githubUsername ?? 'user';
 
-    final name = await _askString('Package name', 'my-package');
+    final name = await _askString('Asset name', 'my_asset');
     final version = await _askString('Version', '1.0.0');
-    final description = await _askString('Description', 'A sample Homebrew package');
-    final repository = await _askString('Repository URL', 'https://github.com/$defaultOwner/$name.git');
+    final description = await _askString(
+      'Description',
+      'A sample Homebrew package',
+    );
+    final repository = await _askString(
+      'Repository URL',
+      'https://github.com/$defaultOwner/$name.git',
+    );
     final license = await _askString('License', 'MIT');
     final binaryPath = await _askString('Binary file path', 'build/$name');
 
@@ -86,7 +85,13 @@ class InitCommand extends Command {
     if (await File(binaryPath).exists()) {
       checksum = await _calculateFileChecksum(binaryPath);
     } else {
-      print('⚠️  Warning: Binary file not found at $binaryPath');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor(
+          '${StatusMarker.warning} ',
+          AnsiColor.yellow1,
+        )
+        ..write('Binary file not found at $binaryPath');
+      print(buffer.toString());
       checksum = null;
     }
 
@@ -110,17 +115,24 @@ class InitCommand extends Command {
   }
 
   Future<List<String>> _collectDependencies() async {
-    final depsInput = await _askString('Dependencies (comma-separated, leave empty if none)', '');
+    final depsInput = await _askString(
+      'Dependencies (comma-separated, leave empty if none)',
+      '',
+    );
 
     final deps = <String>[];
     if (depsInput.trim().isNotEmpty) {
-      deps.addAll(depsInput.split(',').map((dep) => dep.trim()).where((dep) => dep.isNotEmpty));
+      deps.addAll(
+        depsInput
+            .split(',')
+            .map((dep) => dep.trim())
+            .where((dep) => dep.isNotEmpty),
+      );
     }
 
     return deps;
   }
 
-  
   Future<String?> _getGithubUsername() async {
     try {
       // Try GitHub CLI first
@@ -138,7 +150,11 @@ class InitCommand extends Command {
 
     try {
       // Try git config
-      final result = await Process.run('git', ['config', '--global', 'github.user']);
+      final result = await Process.run('git', [
+        'config',
+        '--global',
+        'github.user',
+      ]);
       if (result.exitCode == 0) {
         final username = (result.stdout as String).trim();
         if (username.isNotEmpty) {
@@ -151,7 +167,11 @@ class InitCommand extends Command {
 
     try {
       // Try git user.name as fallback
-      final result = await Process.run('git', ['config', '--global', 'user.name']);
+      final result = await Process.run('git', [
+        'config',
+        '--global',
+        'user.name',
+      ]);
       if (result.exitCode == 0) {
         final username = (result.stdout as String).trim();
         if (username.isNotEmpty) {
@@ -182,33 +202,45 @@ class InitCommand extends Command {
   }
 
   Future<void> _saveConfig(TapsterConfig config) async {
-    final spinner = CliSpin(text: 'Saving configuration file...')..start();
-
     try {
       final configService = ConfigService();
       await configService.saveConfig(config, '.tapster.yaml');
-      spinner.success('✅ Configuration saved to .tapster.yaml');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.success} ', AnsiColor.green)
+        ..write('Configuration saved to .tapster.yaml');
+      print(buffer.toString());
     } catch (e) {
-      spinner.fail('❌ Failed to save configuration: $e');
+      final buffer = StringBuffer()
+        ..writeWithForegroundColor('${StatusMarker.error} ', AnsiColor.red)
+        ..write('Failed to save configuration: $e');
+      print(buffer.toString());
       exit(1);
     }
   }
 
   Future<String> _askString(String prompt, String defaultValue) async {
-    // Use ANSI escape codes for gray default value
-    final grayStart = '\x1b[90m';
-    final grayEnd = '\x1b[0m';
-    stdout.write('$prompt [$grayStart$defaultValue$grayEnd]: ');
+    if (defaultValue.trim().isEmpty) {
+      stdout.write('$prompt: ');
+    } else {
+      // Use ansix for gray default value
+      final buffer = StringBuffer()
+        ..write('$prompt: ')
+        ..writeWithForegroundColor('[$defaultValue]', AnsiColor.grey50)
+        ..write(' ');
+      stdout.write(buffer.toString());
+    }
     final input = stdin.readLineSync()?.trim() ?? '';
     return input.isEmpty ? defaultValue : input;
   }
 
   Future<bool> _askBool(String prompt, bool defaultValue) async {
     final defaultStr = defaultValue ? 'Y/n' : 'y/N';
-    // Use ANSI escape codes for gray default value
-    final grayStart = '\x1b[90m';
-    final grayEnd = '\x1b[0m';
-    stdout.write('$prompt [$grayStart$defaultStr$grayEnd]: ');
+    // Use ansix for gray default value
+    final buffer = StringBuffer()
+      ..write('$prompt: ')
+      ..writeWithForegroundColor('[$defaultStr]', AnsiColor.grey50)
+      ..write(' ');
+    stdout.write(buffer.toString());
     final input = stdin.readLineSync()!.trim().toLowerCase();
 
     if (input.isEmpty) return defaultValue;
