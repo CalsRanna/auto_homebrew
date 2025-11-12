@@ -1,6 +1,6 @@
 name: tapster
 description: A command-line tool for automating Homebrew package publishing
-version: 1.0.1+17
+version: 1.0.2+20
 repository: https://github.com/tapster/tapster
 
 environment:
