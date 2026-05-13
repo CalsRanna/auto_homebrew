@@ -52,44 +52,137 @@ class InitCommand extends Command {
   }
 
   Future<TapsterConfig> _manualConfig() async {
-    // Get GitHub username and email from local config
+    // Project type selection
+    print('\nChoose project type:');
+    print('  [1] CLI tool → Homebrew Formula');
+    print('  [2] macOS GUI → Homebrew Cask');
+    print('  [3] Windows GUI → Scoop');
+    print('  [4] Cross-platform GUI → Cask + Scoop');
+    final typeChoice = await _askString('Type', '1');
+
+    // Get GitHub username for defaults
     final githubUsername = await _getGithubUsername();
     final defaultOwner = githubUsername ?? 'user';
 
+    // Common fields
     final name = await _askString('Asset name', 'my_asset');
     final version = await _askString('Version', '1.0.0');
-    final description = await _askString(
-      'Description',
-      'A sample Homebrew package',
-    );
-    final repository = await _askString(
-      'Repository URL',
-      'https://github.com/$defaultOwner/$name.git',
-    );
+    final description = await _askString('Description', 'A sample Homebrew package');
+    final repository = await _askString('Repository URL', 'https://github.com/$defaultOwner/$name.git');
     final license = await _askString('License', 'MIT');
-    final binaryPath = await _askString('Binary file path', 'build/$name');
-
-    // Collect dependencies
-    final dependencies = await _collectDependencies();
-
-    // Collect publish information
-    final tap = await _askString('Publish tap', '');
-
-    // Calculate checksum for binary file
-    String? checksum;
-    if (await File(binaryPath).exists()) {
-      checksum = await _calculateFileChecksum(binaryPath);
-    } else {
-      final buffer = StringBuffer()
-        ..writeWarning('Binary file not found at $binaryPath');
-      print(buffer.toString());
-      checksum = null;
-    }
 
     // Generate homepage from repository URL
     final homepage = repository.endsWith('.git')
         ? repository.substring(0, repository.length - 4)
         : repository;
+
+    // Type-specific configuration
+    FormulaConfig? formula;
+    CaskConfig? cask;
+    ScoopConfig? scoop;
+
+    switch (typeChoice) {
+      case '1':
+        final binaryPath = await _askString('Binary file path', 'build/$name');
+        final dependencies = await _collectDependencies();
+        final tap = await _askString('Publish tap', '');
+        String? checksum;
+        if (await File(binaryPath).exists()) {
+          checksum = await _calculateFileChecksum(binaryPath);
+        } else {
+          final buffer = StringBuffer()
+            ..writeWarning('Binary file not found at $binaryPath');
+          print(buffer.toString());
+        }
+        formula = FormulaConfig(
+          tap: tap,
+          asset: binaryPath,
+          checksum: checksum,
+          dependencies: dependencies,
+        );
+        break;
+
+      case '2':
+        final binaryPath = await _askString('App archive path (.zip)', 'build/$name.zip');
+        final tap = await _askString('Cask tap', '');
+        final appName = await _askString('App name (e.g. MyApp.app)', '$name.app');
+        String? checksum;
+        if (await File(binaryPath).exists()) {
+          checksum = await _calculateFileChecksum(binaryPath);
+        } else {
+          final buffer = StringBuffer()
+            ..writeWarning('Asset file not found at $binaryPath');
+          print(buffer.toString());
+        }
+        cask = CaskConfig(
+          tap: tap,
+          asset: binaryPath,
+          appName: appName,
+          checksum: checksum,
+        );
+        break;
+
+      case '3':
+        final binaryPath = await _askString('App archive path (.zip)', 'build/$name.zip');
+        final bucket = await _askString('Scoop bucket', '$defaultOwner/scoop-bucket');
+        final arch = await _askString('Architecture', '64bit');
+        scoop = ScoopConfig(
+          bucket: bucket,
+          asset: binaryPath,
+          arch: arch,
+        );
+        break;
+
+      case '4':
+        // macOS
+        final macAsset = await _askString('macOS app archive path (.zip)', 'build/macos/$name.zip');
+        final caskTap = await _askString('Cask tap', '');
+        final appName = await _askString('macOS App name (e.g. MyApp.app)', '$name.app');
+        String? macChecksum;
+        if (await File(macAsset).exists()) {
+          macChecksum = await _calculateFileChecksum(macAsset);
+        } else {
+          final buffer = StringBuffer()
+            ..writeWarning('macOS asset file not found at $macAsset');
+          print(buffer.toString());
+        }
+        cask = CaskConfig(
+          tap: caskTap,
+          asset: macAsset,
+          appName: appName,
+          checksum: macChecksum,
+        );
+        // Windows
+        final winAsset = await _askString('Windows app archive path (.zip)', 'build/windows/$name.zip');
+        final bucket = await _askString('Scoop bucket', '$defaultOwner/scoop-bucket');
+        final arch = await _askString('Architecture', '64bit');
+        scoop = ScoopConfig(
+          bucket: bucket,
+          asset: winAsset,
+          arch: arch,
+        );
+        break;
+
+      default:
+        final binaryPath = await _askString('Binary file path', 'build/$name');
+        final dependencies = await _collectDependencies();
+        final tap = await _askString('Publish tap', '');
+        String? checksum;
+        if (await File(binaryPath).exists()) {
+          checksum = await _calculateFileChecksum(binaryPath);
+        } else {
+          final buffer = StringBuffer()
+            ..writeWarning('Binary file not found at $binaryPath');
+          print(buffer.toString());
+        }
+        formula = FormulaConfig(
+          tap: tap,
+          asset: binaryPath,
+          checksum: checksum,
+          dependencies: dependencies,
+        );
+        break;
+    }
 
     return TapsterConfig(
       name: name,
@@ -98,10 +191,9 @@ class InitCommand extends Command {
       homepage: homepage,
       repository: repository,
       license: license,
-      dependencies: dependencies,
-      tap: tap,
-      asset: binaryPath,
-      checksum: checksum,
+      formula: formula,
+      cask: cask,
+      scoop: scoop,
     );
   }
 
