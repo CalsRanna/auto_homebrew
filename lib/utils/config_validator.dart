@@ -51,26 +51,24 @@ class ConfigValidator {
       errors.add('License is required');
     }
 
-    // Validate dependencies
-    for (final dep in config.dependencies) {
-      if (dep.trim().isEmpty) {
-        warnings.add('Empty dependency found');
-      }
+    // Validate at least one distribution target exists
+    if (config.formula == null && config.cask == null && config.scoop == null) {
+      errors.add('At least one distribution target (formula, cask, or scoop) must be configured');
     }
 
-    // Validate tap
-    if (config.tap.trim().isEmpty) {
-      errors.add('Tap is required');
+    // Validate formula section
+    if (config.formula != null) {
+      _validateFormula(config.formula!, errors, warnings);
     }
 
-    // Validate asset
-    if (config.asset.trim().isEmpty) {
-      errors.add('Asset path is required');
-    } else {
-      final file = File(config.asset);
-      if (!file.existsSync()) {
-        warnings.add('Asset file not found: ${config.asset}');
-      }
+    // Validate cask section
+    if (config.cask != null) {
+      _validateCask(config.cask!, errors, warnings);
+    }
+
+    // Validate scoop section
+    if (config.scoop != null) {
+      _validateScoop(config.scoop!, errors, warnings);
     }
 
     return ValidationResult(
@@ -78,6 +76,61 @@ class ConfigValidator {
       errors: errors,
       warnings: warnings,
     );
+  }
+
+  void _validateFormula(FormulaConfig f, List<String> errors, List<String> warnings) {
+    if (f.tap.trim().isEmpty) {
+      errors.add('formula.tap is required');
+    }
+    if (f.asset.trim().isEmpty) {
+      errors.add('formula.asset is required');
+    } else {
+      final file = File(f.asset);
+      if (!file.existsSync()) {
+        warnings.add('formula.asset file not found: ${f.asset}');
+      }
+    }
+    for (final dep in f.dependencies) {
+      if (dep.trim().isEmpty) {
+        warnings.add('Empty formula dependency found');
+      }
+    }
+  }
+
+  void _validateCask(CaskConfig c, List<String> errors, List<String> warnings) {
+    if (c.tap.trim().isEmpty) {
+      errors.add('cask.tap is required');
+    }
+    if (c.asset.trim().isEmpty) {
+      errors.add('cask.asset is required');
+    } else {
+      final file = File(c.asset);
+      if (!file.existsSync()) {
+        warnings.add('cask.asset file not found: ${c.asset}');
+      }
+    }
+    if (c.appName.trim().isEmpty) {
+      errors.add('cask.app_name is required');
+    } else if (!c.appName.endsWith('.app')) {
+      warnings.add('cask.app_name should end with .app: ${c.appName}');
+    }
+  }
+
+  void _validateScoop(ScoopConfig s, List<String> errors, List<String> warnings) {
+    if (s.bucket.trim().isEmpty) {
+      errors.add('scoop.bucket is required');
+    }
+    if (s.asset.trim().isEmpty) {
+      errors.add('scoop.asset is required');
+    } else {
+      final file = File(s.asset);
+      if (!file.existsSync()) {
+        warnings.add('scoop.asset file not found: ${s.asset}');
+      }
+    }
+    if (!['64bit', '32bit', 'arm64'].contains(s.arch)) {
+      warnings.add('scoop.arch should be 64bit, 32bit, or arm64, got: ${s.arch}');
+    }
   }
 
   bool _isValidPackageName(String name) {
