@@ -24,7 +24,7 @@ class {{CLASS_NAME}} < Formula
 end
 ''';
 
-  Future<String> generateFormula(TapsterConfig config) async {
+  Future<String> generateFormula(TapsterConfig config, FormulaConfig formulaConfig) async {
     final assetService = AssetService();
     final now = DateTime.now().toUtc();
     final timestamp = now.toIso8601String();
@@ -38,16 +38,16 @@ end
     };
 
     // Handle asset
-    if (config.asset.isNotEmpty) {
-      final assetInfo = await assetService.getAssetInfo(config.asset);
+    if (formulaConfig.asset.isNotEmpty) {
+      final assetInfo = await assetService.getAssetInfo(formulaConfig.asset);
       context['URL'] = _getDefaultUrl(config, config.version);
-      context['SHA256'] = config.checksum ?? assetInfo.checksum;
-      context['EXECUTABLE_NAME'] = _getExecutableName(config.asset);
+      context['SHA256'] = formulaConfig.checksum ?? assetInfo.checksum;
+      context['EXECUTABLE_NAME'] = _getExecutableName(formulaConfig.asset);
     }
 
     // Handle dependencies
-    if (config.dependencies.isNotEmpty) {
-      context['depends_on_brew'] = config.dependencies;
+    if (formulaConfig.dependencies.isNotEmpty) {
+      context['depends_on_brew'] = formulaConfig.dependencies;
     }
 
     return _renderTemplate(defaultFormulaTemplate, context);
