@@ -6,6 +6,9 @@ import 'package:tapster/services/config_service.dart';
 import 'package:tapster/utils/string_buffer_extensions.dart';
 import 'package:tapster/services/github_service.dart';
 import 'package:tapster/services/formula_service.dart';
+import 'package:tapster/services/cask_service.dart';
+import 'package:tapster/services/scoop_service.dart';
+import 'package:tapster/models/tapster_config.dart';
 
 class PublishCommand extends Command {
   @override
@@ -20,6 +23,13 @@ class PublishCommand extends Command {
       abbr: 'f',
       help: 'Force overwrite existing release with the same version',
       negatable: false,
+    );
+    argParser.addMultiOption(
+      'target',
+      abbr: 't',
+      help: 'Target distribution(s) to publish: formula, cask, scoop',
+      allowed: ['formula', 'cask', 'scoop'],
+      defaultsTo: [],
     );
   }
 
@@ -68,61 +78,39 @@ class PublishCommand extends Command {
 
   Future<void> _executePublishWorkflow({bool force = false}) async {
     try {
-      // Load configuration
       final configService = ConfigService();
       final config = await configService.loadConfig(null);
 
-      // Initialize services
       final githubService = GitHubService();
-      final formulaService = FormulaService();
 
-      // Parse repository information from config
+      // Determine which targets to publish
+      final selectedTargets = argResults!['target'] as List<String>;
+      final publishFormula = _shouldPublish('formula', selectedTargets, config.formula != null);
+      final publishCask = _shouldPublish('cask', selectedTargets, config.cask != null);
+      final publishScoop = _shouldPublish('scoop', selectedTargets, config.scoop != null);
+
+      // Parse repository info
       final repoUri = Uri.parse(config.repository);
-      final repoParts = repoUri.path
-          .split('/')
-          .where((p) => p.isNotEmpty)
-          .toList();
+      final repoParts = repoUri.path.split('/').where((p) => p.isNotEmpty).toList();
       if (repoParts.length < 2) {
         throw Exception('Invalid repository URL format');
       }
+      final targetOwner = repoParts[0];
+      final targetRepo = repoParts[1].replaceAll('.git', '');
+      final targetRepoString = '$targetOwner/$targetRepo';
 
-      // Parse tap information from config
-      String fullTapPath;
-      if (config.tap.contains('/')) {
-        // Full format: owner/tap
-        fullTapPath = config.tap;
-      } else {
-        // Simplified format: just tap name, infer owner from repository
-        final owner =
-            repoParts[0]; // First part of repository path is the owner
-        fullTapPath = '$owner/${config.tap}';
-      }
+      // Step 1: Create GitHub Release (shared across all targets)
+      final releaseStep = PublishStep(
+        name: 'Create GitHub Release',
+        description: 'Creating GitHub release with assets',
+        action: () async {
+          final tagName = 'v${config.version}';
+          final releaseName = 'v${config.version}';
+          final releaseNotes = 'Release ${config.version}\n\n${config.description}';
 
-      final steps = <PublishStep>[
-        PublishStep(
-          name: 'Create GitHub Release',
-          description: 'Creating GitHub release with assets',
-          action: () async {
-            final tagName = 'v${config.version}';
-            final releaseName = "v${config.version}";
-            final releaseNotes =
-                "Release ${config.version}\n\n${config.description}";
-
-            // Parse repository URL to get owner/repo format
-            final repoUri = Uri.parse(config.repository);
-            final repoParts = repoUri.path
-                .split('/')
-                .where((p) => p.isNotEmpty)
-                .toList();
-            if (repoParts.length < 2) {
-              throw Exception('Invalid repository URL format');
-            }
-            final targetOwner = repoParts[0];
-            final targetRepo = repoParts[1].replaceAll('.git', '');
-            final targetRepoString = '$targetOwner/$targetRepo';
-
-            // Create release (this also creates the tag)
-            final releaseId = await githubService.createReleaseCLI(
+          int? releaseId;
+          try {
+            releaseId = await githubService.createReleaseCLI(
               tagName: tagName,
               name: releaseName,
               notes: releaseNotes,
@@ -131,142 +119,122 @@ class PublishCommand extends Command {
               prerelease: false,
               force: force,
             );
+          } on ReleaseExistsException {
+            // Release already exists (from a previous platform publish), continue
+          }
 
-            // Upload asset
-            final assetFile = File(config.asset);
+          // Upload all assets that exist locally
+          for (final assetPath in _collectAssetPaths(config, publishFormula, publishCask, publishScoop)) {
+            final assetFile = File(assetPath);
             if (await assetFile.exists()) {
               await githubService.uploadAsset(
                 tagName: tagName,
-                assetPath: config.asset,
+                assetPath: assetPath,
                 repo: targetRepoString,
               );
-            } else {
-              throw Exception('Asset file not found: ${config.asset}');
             }
+          }
 
-            return {'release_id': releaseId, 'tag': tagName};
-          },
-        ),
+          return {'release_id': releaseId, 'tag': tagName};
+        },
+      );
 
-        PublishStep(
+      final steps = <PublishStep>[releaseStep];
+
+      // Step 2: Formula (if configured and selected)
+      if (publishFormula && config.formula != null) {
+        final formulaService = FormulaService();
+        final formulaConfig = config.formula!;
+        final fullTapPath = _resolveTapPath(config, formulaConfig.tap);
+
+        steps.add(PublishStep(
           name: 'Generate Formula',
           description: 'Generating Homebrew formula',
           action: () async {
-            final assetFile = File(config.asset);
-            if (!await assetFile.exists()) {
-              throw Exception('Asset file not found: ${config.asset}');
-            }
-
-            final formula = await formulaService.generateFormula(config);
-            return {'formula': formula};
+            final formula = await formulaService.generateFormula(config, formulaConfig);
+            return {'formula': formula, 'formula_file': '${config.name}.rb'};
           },
-        ),
+        ));
 
-        PublishStep(
+        steps.add(PublishStep(
           name: 'Push Formula to Tap',
           description: 'Pushing formula to tap repository',
           action: () async {
-            final formulaContent = await formulaService.generateFormula(config);
-
-            // Generate formula filename
-            final formulaFileName = '${config.name}.rb';
-
-            // Convert tap name to repository name
-            final tapParts = fullTapPath.split('/');
-            final tapOwner = tapParts[0];
-            final tapName = tapParts[1];
-            final tapRepoName = tapName.startsWith('homebrew-')
-                ? tapName
-                : 'homebrew-$tapName';
-
-            // Check if tap repository exists, create if it doesn't
-            try {
-              final checkRepo = '$tapOwner/$tapRepoName';
-              final checkResult = await Process.run('gh', [
-                'repo',
-                'view',
-                checkRepo,
-              ]);
-              if (checkResult.exitCode != 0) {
-                // Repository doesn't exist, create it
-                print('📦 Creating tap repository: $tapOwner/$tapRepoName');
-                final createResult = await Process.run('gh', [
-                  'repo',
-                  'create',
-                  checkRepo,
-                  '--public',
-                  '--add-readme',
-                ]);
-                if (createResult.exitCode != 0) {
-                  throw Exception(
-                    'Failed to create tap repository: ${createResult.stderr}',
-                  );
-                }
-              }
-            } catch (e) {
-              // If gh command fails, try to continue anyway
-              print('⚠️  Could not verify tap repository, continuing anyway');
-            }
-
-            // Encode content to base64 for GitHub API
-            final encodedContent = base64Encode(utf8.encode(formulaContent));
-
-            // Check if file already exists to get its SHA
-            String? sha;
-            try {
-              final checkResult = await Process.run('gh', [
-                'api',
-                'repos/$tapOwner/$tapRepoName/contents/$formulaFileName',
-              ]);
-              if (checkResult.exitCode == 0) {
-                final fileData =
-                    jsonDecode(checkResult.stdout) as Map<String, dynamic>;
-                sha = fileData['sha'] as String?;
-              }
-            } catch (e) {
-              // File doesn't exist, which is expected for new files
-              sha = null;
-            }
-
-            // Push file directly using GitHub API
-            final apiArgs = [
-              'api',
-              '-X',
-              'PUT',
-              'repos/$tapOwner/$tapRepoName/contents/$formulaFileName',
-              '-f',
-              'message=Add ${config.name} ${config.version}',
-              '-f',
-              'content=$encodedContent',
-              '-f',
-              'branch=main',
-            ];
-
-            // Add SHA if updating existing file
-            if (sha != null) {
-              apiArgs.add('-f');
-              apiArgs.add('sha=$sha');
-            }
-
-            final apiResult = await Process.run('gh', apiArgs);
-
-            if (apiResult.exitCode != 0) {
-              throw Exception(
-                'Failed to push formula file: ${apiResult.stdout}\n${apiResult.stderr}',
-              );
-            }
-
-            return {
-              'formula_file': formulaFileName,
-              'tap_repo': fullTapPath,
-              'formula_content': formulaContent,
-            };
+            final formula = await formulaService.generateFormula(config, formulaConfig);
+            await _pushRubyFileToTap(
+              fullTapPath: fullTapPath,
+              fileName: '${config.name}.rb',
+              content: formula,
+              config: config,
+            );
+            return {'formula_file': '${config.name}.rb', 'tap_repo': fullTapPath};
           },
-        ),
-      ];
+        ));
+      }
 
+      // Step 3: Cask (if configured and selected)
+      if (publishCask && config.cask != null) {
+        final caskService = CaskService();
+        final caskConfig = config.cask!;
+        final fullTapPath = _resolveTapPath(config, caskConfig.tap);
+
+        steps.add(PublishStep(
+          name: 'Generate Cask',
+          description: 'Generating Homebrew cask',
+          action: () async {
+            final cask = await caskService.generateCask(config, caskConfig);
+            return {'cask_file': '${config.name}.rb'};
+          },
+        ));
+
+        steps.add(PublishStep(
+          name: 'Push Cask to Tap',
+          description: 'Pushing cask to tap repository',
+          action: () async {
+            final cask = await caskService.generateCask(config, caskConfig);
+            await _pushRubyFileToTap(
+              fullTapPath: fullTapPath,
+              fileName: '${config.name}.rb',
+              content: cask,
+              config: config,
+            );
+            return {'cask_file': '${config.name}.rb', 'tap_repo': fullTapPath};
+          },
+        ));
+      }
+
+      // Step 4: Scoop (if configured and selected)
+      if (publishScoop && config.scoop != null) {
+        final scoopService = ScoopService();
+        final scoopConfig = config.scoop!;
+
+        steps.add(PublishStep(
+          name: 'Generate Scoop Manifest',
+          description: 'Generating Scoop manifest',
+          action: () async {
+            final manifest = await scoopService.generateScoopManifest(config, scoopConfig);
+            return {'manifest_file': '${config.name}.json'};
+          },
+        ));
+
+        steps.add(PublishStep(
+          name: 'Push Scoop Manifest to Bucket',
+          description: 'Pushing manifest to Scoop bucket',
+          action: () async {
+            final manifest = await scoopService.generateScoopManifest(config, scoopConfig);
+            await _pushFileToRepo(
+              repoPath: scoopConfig.bucket,
+              fileName: '${config.name}.json',
+              content: manifest,
+              config: config,
+            );
+            return {'manifest_file': '${config.name}.json', 'bucket': scoopConfig.bucket};
+          },
+        ));
+      }
+
+      // Execute all steps
       final results = <String, dynamic>{};
-
       for (final step in steps) {
         final spinner = CliSpin()..start();
         step.spinner = spinner;
@@ -284,11 +252,123 @@ class PublishCommand extends Command {
       }
 
       print('');
-      final buffer = StringBuffer()
-        ..writeSuccess('Publishing completed successfully!');
+      final buffer = StringBuffer()..writeSuccess('Publishing completed successfully!');
       print(buffer.toString());
     } catch (e) {
       rethrow;
+    }
+  }
+
+  bool _shouldPublish(String target, List<String> selected, bool isConfigured) {
+    if (selected.isEmpty) return isConfigured;
+    return selected.contains(target) && isConfigured;
+  }
+
+  List<String> _collectAssetPaths(
+    TapsterConfig config,
+    bool publishFormula,
+    bool publishCask,
+    bool publishScoop,
+  ) {
+    final paths = <String>[];
+    if (publishFormula && config.formula != null) {
+      paths.add(config.formula!.asset);
+    }
+    if (publishCask && config.cask != null) {
+      paths.add(config.cask!.asset);
+    }
+    if (publishScoop && config.scoop != null) {
+      paths.add(config.scoop!.asset);
+    }
+    return paths;
+  }
+
+  String _resolveTapPath(TapsterConfig config, String tap) {
+    if (tap.contains('/')) return tap;
+    final repoUri = Uri.parse(config.repository);
+    final owner = repoUri.path.split('/').where((p) => p.isNotEmpty).first;
+    return '$owner/$tap';
+  }
+
+  Future<void> _pushRubyFileToTap({
+    required String fullTapPath,
+    required String fileName,
+    required String content,
+    required TapsterConfig config,
+  }) async {
+    await _pushFileToRepo(
+      repoPath: fullTapPath,
+      fileName: fileName,
+      content: content,
+      config: config,
+      isHomebrewTap: true,
+    );
+  }
+
+  Future<void> _pushFileToRepo({
+    required String repoPath,
+    required String fileName,
+    required String content,
+    required TapsterConfig config,
+    bool isHomebrewTap = false,
+  }) async {
+    final parts = repoPath.split('/');
+    final owner = parts[0];
+    final tapName = parts[1];
+
+    final repoName = isHomebrewTap
+        ? (tapName.startsWith('homebrew-') ? tapName : 'homebrew-$tapName')
+        : tapName;
+
+    // Check if repo exists, create if not
+    try {
+      final checkRepo = '$owner/$repoName';
+      final checkResult = await Process.run('gh', ['repo', 'view', checkRepo]);
+      if (checkResult.exitCode != 0) {
+        print('Creating repository: $owner/$repoName');
+        final createResult = await Process.run('gh', [
+          'repo', 'create', checkRepo, '--public', '--add-readme',
+        ]);
+        if (createResult.exitCode != 0) {
+          throw Exception('Failed to create repository: ${createResult.stderr}');
+        }
+      }
+    } catch (e) {
+      print('Could not verify repository, continuing anyway');
+    }
+
+    // Push file via GitHub API
+    final encodedContent = base64Encode(utf8.encode(content));
+
+    String? sha;
+    try {
+      final checkResult = await Process.run('gh', [
+        'api', 'repos/$owner/$repoName/contents/$fileName',
+      ]);
+      if (checkResult.exitCode == 0) {
+        final fileData = jsonDecode(checkResult.stdout) as Map<String, dynamic>;
+        sha = fileData['sha'] as String?;
+      }
+    } catch (e) {
+      sha = null;
+    }
+
+    final apiArgs = [
+      'api', '-X', 'PUT',
+      'repos/$owner/$repoName/contents/$fileName',
+      '-f', 'message=Add ${config.name} ${config.version}',
+      '-f', 'content=$encodedContent',
+      '-f', 'branch=main',
+    ];
+
+    if (sha != null) {
+      apiArgs.add('-f');
+      apiArgs.add('sha=$sha');
+    }
+
+    final apiResult = await Process.run('gh', apiArgs);
+    if (apiResult.exitCode != 0) {
+      throw Exception('Failed to push file: ${apiResult.stdout}\n${apiResult.stderr}');
     }
   }
 }
@@ -343,6 +423,34 @@ void _displayStepSuccess(String stepName, Map<String, dynamic> result) {
       print(buffer.toString());
       print('    Tap repository: ${result['tap_repo']}');
       print('    Formula file: ${result['formula_file']}');
+      break;
+
+    case 'Generate Cask':
+      final buffer = StringBuffer()
+        ..writeSuccess('Homebrew cask generated (${result['cask_file']})');
+      print(buffer.toString());
+      break;
+
+    case 'Push Cask to Tap':
+      final buffer = StringBuffer()
+        ..writeSuccess('Homebrew cask pushed (${result['tap_repo']})');
+      print(buffer.toString());
+      print('    Tap repository: ${result['tap_repo']}');
+      print('    Cask file: ${result['cask_file']}');
+      break;
+
+    case 'Generate Scoop Manifest':
+      final buffer = StringBuffer()
+        ..writeSuccess('Scoop manifest generated (${result['manifest_file']})');
+      print(buffer.toString());
+      break;
+
+    case 'Push Scoop Manifest to Bucket':
+      final buffer = StringBuffer()
+        ..writeSuccess('Scoop manifest pushed (${result['bucket']})');
+      print(buffer.toString());
+      print('    Bucket: ${result['bucket']}');
+      print('    Manifest file: ${result['manifest_file']}');
       break;
   }
 }
