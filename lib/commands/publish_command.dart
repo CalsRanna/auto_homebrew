@@ -182,7 +182,7 @@ class PublishCommand extends Command {
           name: 'Generate Cask',
           description: 'Generating Homebrew cask',
           action: () async {
-            final cask = await caskService.generateCask(config, caskConfig);
+            await caskService.generateCask(config, caskConfig);
             return {'cask_file': '${config.name}.rb'};
           },
         ));
@@ -212,7 +212,7 @@ class PublishCommand extends Command {
           name: 'Generate Scoop Manifest',
           description: 'Generating Scoop manifest',
           action: () async {
-            final manifest = await scoopService.generateScoopManifest(config, scoopConfig);
+            await scoopService.generateScoopManifest(config, scoopConfig);
             return {'manifest_file': '${config.name}.json'};
           },
         ));
