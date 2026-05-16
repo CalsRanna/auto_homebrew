@@ -100,7 +100,7 @@ class UpgradeCommand extends Command {
       }
 
       // Get current asset info
-      final assetInfo = await assetService.getAssetInfo(config.asset);
+      final assetInfo = await assetService.getAssetInfo(assetPath);
       print('    Target: $targetLabel');
       print('    Asset: $assetPath');
       print('    Size: ${assetInfo.size} bytes');
