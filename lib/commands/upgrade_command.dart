@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:args/command_runner.dart';
 import 'package:cli_spin/cli_spin.dart';
+import 'package:tapster/models/tapster_config.dart';
 import 'package:tapster/services/config_service.dart';
 import 'package:tapster/services/asset_service.dart';
 import 'package:tapster/utils/string_buffer_extensions.dart';
@@ -64,28 +65,49 @@ class UpgradeCommand extends Command {
         ..writeSuccess('Configuration loaded ($configPath, version: ${config.version})');
       print(buffer.toString());
 
+      // Determine which target to upgrade
+      String assetPath;
+      String? currentChecksum;
+      String targetLabel;
+
+      if (config.formula != null) {
+        assetPath = config.formula!.asset;
+        currentChecksum = config.formula!.checksum;
+        targetLabel = 'formula';
+      } else if (config.cask != null) {
+        assetPath = config.cask!.asset;
+        currentChecksum = config.cask!.checksum;
+        targetLabel = 'cask';
+      } else if (config.scoop != null) {
+        assetPath = config.scoop!.asset;
+        currentChecksum = null;
+        targetLabel = 'scoop';
+      } else {
+        final buf = StringBuffer()..writeError('No distribution target configured');
+        print(buf.toString());
+        exit(1);
+      }
+
       // Check asset file
       final assetService = AssetService();
-      final assetFile = File(config.asset);
+      final assetFile = File(assetPath);
 
       if (!await assetFile.exists()) {
-        final buffer = StringBuffer()
-          ..writeError('Asset file not found');
-        print(buffer.toString());
-        print('    Asset file not found: ${config.asset}');
-        print('    Please check the asset path in your configuration.');
-        print('');
+        final buf = StringBuffer()..writeError('Asset file not found');
+        print(buf.toString());
+        print('    Asset file not found: $assetPath');
         exit(1);
       }
 
       // Get current asset info
       final assetInfo = await assetService.getAssetInfo(config.asset);
-      print('    Asset: ${config.asset}');
+      print('    Target: $targetLabel');
+      print('    Asset: $assetPath');
       print('    Size: ${assetInfo.size} bytes');
       print('    Current checksum: ${assetInfo.checksum}');
 
       // Compare checksums
-      if (config.checksum == assetInfo.checksum) {
+      if (currentChecksum == assetInfo.checksum) {
         print('');
         final buffer = StringBuffer()
           ..writeWarning('Asset checksum unchanged');
@@ -100,7 +122,7 @@ class UpgradeCommand extends Command {
       final buffer2 = StringBuffer()
         ..writeSuccess('Asset checksum changed');
       print(buffer2.toString());
-      print('    Previous checksum: ${config.checksum ?? "none"}');
+      print('    Previous checksum: ${currentChecksum ?? "none"}');
       print('    New checksum: ${assetInfo.checksum}');
       print('');
 
@@ -127,7 +149,7 @@ class UpgradeCommand extends Command {
       print('');
       print('📋 Upgrade summary:');
       print('    Version: ${config.version} → $finalVersion');
-      print('    Checksum: ${config.checksum ?? "none"} → ${assetInfo.checksum}');
+      print('    Checksum: ${currentChecksum ?? "none"} → ${assetInfo.checksum}');
       print('');
 
       if (dryRun) {
@@ -153,10 +175,28 @@ class UpgradeCommand extends Command {
       }
 
       // Update configuration
-      final upgradedConfig = config.copyWith(
-        version: finalVersion,
-        checksum: assetInfo.checksum,
-      );
+      TapsterConfig upgradedConfig;
+      switch (targetLabel) {
+        case 'formula':
+          upgradedConfig = config.copyWith(
+            version: finalVersion,
+            formula: config.formula!.copyWith(checksum: assetInfo.checksum),
+          );
+          break;
+        case 'cask':
+          upgradedConfig = config.copyWith(
+            version: finalVersion,
+            cask: config.cask!.copyWith(checksum: assetInfo.checksum),
+          );
+          break;
+        case 'scoop':
+          upgradedConfig = config.copyWith(
+            version: finalVersion,
+          );
+          break;
+        default:
+          upgradedConfig = config.copyWith(version: finalVersion);
+      }
 
       // Save configuration
       final saveSpinner = CliSpin()..start();
